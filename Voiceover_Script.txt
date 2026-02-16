@@ -1,0 +1,47 @@
+First, we start with your customer contact list from QuickBooks.
+
+And your PayPal donation transactions. Each transaction includes the donor's name, email, donation amount, fees, and a detailed description of what they donated to.
+
+Notice how we have multiple donations from the same donors throughout the year—some for general support, others for specific programs like the Building Fund, Youth Programs, or Memorial Gifts.
+
+The system automatically captures all transaction details, including gross amounts, processing fees, and net totals.
+
+We can also work with your QuickBooks Sales by Customer Summary report. This provides a clean overview of total donations per customer—perfect for generating annual summary letters.
+
+Whether you're using detailed transaction exports from PayPal, Stripe, or summarized reports from QuickBooks, the system handles them all.
+
+Here's the Donation Letter Generator application. It's clean, simple, and purpose-built for nonprofits.
+
+You'll see two upload areas: one for your customer contact list, and one for your donation data.
+
+Let's upload the customer contact list first. The system instantly processes the Excel file and confirms fifteen customers loaded successfully.
+
+Once both files are uploaded, the dashboard comes to life.
+
+You can see at a glance: fifteen customers, fifty-eight thousand seven hundred dollars in total donations, zero dollars in fees, and fifty-eight thousand seven hundred dollars net amount.
+
+Below, every donor is listed with their email, phone number, and total contribution amount. All the data is merged and ready to generate official IRS-compliant donation letters.
+
+You can customize the branding with your organization's name, tax ID, and colors, then simply click 'Generate Letters' to create personalized tax receipts for every donor.
+
+And here's the result: beautiful, professional donation letters that are fully IRS-compliant.
+
+Each letter includes your organization's branding, the official date, and a personalized greeting.
+
+The letter addresses the donor by name and email, displays their total contribution in a clear, prominent format, and for annual summaries, it breaks down each individual donation by date and description—so donors can see exactly what they supported throughout the year.
+
+Every letter is signed with your authorized signer's name and title, includes your Tax ID, and states that no goods or services were provided in return for the donation.
+
+From here, you have options. If the donor has an email address on file, you can send the letter directly via email with one click. The system tracks which letters have been sent, and for donors without email addresses, you can print individual letters or print them all at once.
+
+Perfect for mailing physical copies or archiving for your records.
+
+That's Phase 1: a complete donation letter automation system.
+
+Upload your data, generate IRS-compliant letters, and distribute them—all in minutes instead of hours.
+
+Saving time, reducing errors, and ensuring every donor receives a professional thank-you letter they can use for tax purposes.
+
+This is just the beginning. Phase 2 will add automated email campaigns, multi-year summaries, and advanced donor analytics.
+
+Ready to streamline your donor communications? Let's talk.

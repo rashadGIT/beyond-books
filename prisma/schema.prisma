@@ -1,0 +1,118 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ScheduledJob {
+  id          String   @id @default(cuid())
+  type        String   // e.g., 'DATA_FETCH', 'IDENTITY_SYNC'
+  label       String
+  schedule    String   // e.g., '12:00 PM'
+  frequency   String   @default("DAILY") // 'HOURLY', 'DAILY', 'WEEKLY'
+  lastRunAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  executions  JobExecution[]
+}
+
+model JobExecution {
+  id           String       @id @default(cuid())
+  jobId        String
+  job          ScheduledJob @relation(fields: [jobId], references: [id])
+  status       String       // 'pending', 'running', 'completed', 'failed'
+  result       String?
+  latency      String?
+  retryCount   Int          @default(0)
+  startedAt    DateTime     @default(now())
+  completedAt  DateTime?
+}
+
+model ProcessedFile {
+  id               String              @id @default(cuid())
+  filename         String
+  source           String              // PayPal, Stripe, QuickBooks, etc.
+  uploadedAt       DateTime            @default(now())
+  fileSize         Int
+  transactionCount Int
+  totalAmount      Float
+  filePath         String?
+  fileContent      String?             // For small files
+  transactions     DonationTransaction[]
+}
+
+model DonationTransaction {
+  id            String          @id @default(cuid())
+  fileId        String
+  file          ProcessedFile   @relation(fields: [fileId], references: [id])
+  transactionId String
+  date          String
+  source        String
+  donorName     String
+  donorEmail    String
+  grossAmount   Float
+  fee           Float
+  netAmount     Float
+  description   String
+  originalData  String          // JSON string
+  createdAt     DateTime        @default(now())
+  letters       DonationLetter[]
+}
+
+model DonationLetter {
+  id            String              @id @default(cuid())
+  donorName     String
+  donorEmail    String
+  totalAmount   Float
+  dateRange     String
+  isSummary     Boolean             @default(false)
+  transactions  DonationTransaction[]
+  pdfPath       String?
+  pdfGenerated  Boolean             @default(false)
+  emailSent     Boolean             @default(false)
+  emailSentAt   DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+model EmailLog {
+  id            String   @id @default(cuid())
+  recipient     String
+  recipientName String
+  subject       String
+  status        String   // 'pending', 'sent', 'failed'
+  letterId      String?
+  errorMessage  String?
+  sentAt        DateTime @default(now())
+}
+
+model ChatMessage {
+  id             String   @id @default(cuid())
+  role           String   // 'user' or 'assistant'
+  content        String
+  timestamp      DateTime @default(now())
+  hasAttachment  Boolean  @default(false)
+  attachmentType String?  // 'csv', 'xlsx'
+  fileId         String?  // Reference to ProcessedFile
+}
+
+model QuickBooksConnection {
+  id            String    @id @default(cuid())
+  realmId       String    @unique
+  accessToken   String
+  refreshToken  String
+  tokenType     String    @default("Bearer")
+  expiresAt     DateTime
+  refreshExpiresAt DateTime
+  companyName   String?
+  lastSyncAt    DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
