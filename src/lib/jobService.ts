@@ -5,26 +5,29 @@ import { FileService } from './fileService';
 const MAX_RETRIES = 3;
 
 export const JobService = {
-  getScheduledJobs: async () => {
+  getScheduledJobs: async (userId: string) => {
     return await prisma.scheduledJob.findMany({
-      orderBy: { schedule: 'asc' }
+      where: { userId },
+      orderBy: { schedule: 'asc' },
     });
   },
 
-  getExecutions: async () => {
+  getExecutions: async (userId: string) => {
     return await prisma.jobExecution.findMany({
+      where: { job: { userId } },
       include: { job: true },
       orderBy: { startedAt: 'desc' },
-      take: 20
+      take: 20,
     });
   },
 
-  createJob: async (data: { type: string; label: string; schedule: string; frequency?: string }) => {
+  createJob: async (userId: string, data: { type: string; label: string; schedule: string; frequency?: string }) => {
     return await prisma.scheduledJob.create({
       data: {
+        userId,
         ...data,
-        frequency: data.frequency || 'DAILY'
-      }
+        frequency: data.frequency || 'DAILY',
+      },
     });
   },
 
@@ -94,15 +97,15 @@ export const JobService = {
     }
   },
 
-  seedIfEmpty: async () => {
-    const count = await prisma.scheduledJob.count();
+  seedIfEmpty: async (userId: string) => {
+    const count = await prisma.scheduledJob.count({ where: { userId } });
     if (count === 0) {
       await prisma.scheduledJob.createMany({
         data: [
-          { type: 'DATA_FETCH', label: 'Stripe API Reconciliation', schedule: '12:00 PM', frequency: 'HOURLY' },
-          { type: 'IDENTITY_SYNC', label: 'PayPal Donor Verification', schedule: '01:30 PM', frequency: 'DAILY' },
-          { type: 'REPORT_GEN', label: 'Weekly Revenue Summary', schedule: '05:00 PM', frequency: 'WEEKLY' },
-        ]
+          { userId, type: 'DATA_FETCH', label: 'Stripe API Reconciliation', schedule: '12:00 PM', frequency: 'HOURLY' },
+          { userId, type: 'IDENTITY_SYNC', label: 'PayPal Donor Verification', schedule: '01:30 PM', frequency: 'DAILY' },
+          { userId, type: 'REPORT_GEN', label: 'Weekly Revenue Summary', schedule: '05:00 PM', frequency: 'WEEKLY' },
+        ],
       });
     }
   }

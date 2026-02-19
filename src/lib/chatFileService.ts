@@ -4,7 +4,7 @@ import { StandardizedTransaction } from './types';
 
 export const ChatFileService = {
   // Process demo files from /demo-data directory
-  processDemoFiles: async () => {
+  processDemoFiles: async (userId = 'system') => {
     const results = await FileService.processDemoFiles();
 
     // Save each demo file to database
@@ -12,6 +12,7 @@ export const ChatFileService = {
       results.map(async (result) => {
         const processedFile = await prisma.processedFile.create({
           data: {
+            userId,
             filename: result.filename,
             source: result.source,
             fileSize: 0, // Demo files don't have size tracking

@@ -20,9 +20,12 @@ import {
   Loader2,
   Paperclip,
   AlertCircle,
-  Database
+  Database,
+  Settings,
+  LogOut,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 type AIStatus = 'idle' | 'thinking' | 'working';
 
@@ -52,6 +55,7 @@ interface Message {
 }
 
 export default function WorkflowDashboard() {
+  const router = useRouter();
   const [status, setStatus] = useState<AIStatus>('idle');
   const [userInput, setUserInput] = useState('');
   const [currentQuery, setCurrentQuery] = useState<string | null>(null);
@@ -70,6 +74,11 @@ export default function WorkflowDashboard() {
     lastSyncAt: string | null;
     error: string | null;
   }>({ connected: false, lastSyncAt: null, error: null });
+  const [aiSettings, setAiSettings] = useState<{
+    provider: string;
+    model: string;
+    maskedKey: string;
+  } | null>(null);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -117,12 +126,20 @@ export default function WorkflowDashboard() {
       }
     };
 
-    // Initial fetch
+    const fetchAISettings = async () => {
+      try {
+        const res = await fetch('/api/settings/ai');
+        const data = await res.json();
+        // API now returns an array; pick the active one
+        const active = Array.isArray(data) ? data.find((s: any) => s.isActive) ?? null : null;
+        setAiSettings(active);
+      } catch {}
+    };
+
     fetchQBStatus();
+    fetchAISettings();
 
-    // Poll every 60 seconds
     const interval = setInterval(fetchQBStatus, 60000);
-
     return () => clearInterval(interval);
   }, []);
 
@@ -462,6 +479,68 @@ export default function WorkflowDashboard() {
               </div>
             </div>
           </div>
+
+            {/* AI Assistant status box */}
+            <div
+              className="hidden sm:block bg-slate-800/50 px-4 py-2 rounded-xl border border-slate-700 cursor-pointer relative group"
+              title={aiSettings ? `${aiSettings.provider} · ${aiSettings.model}` : 'Using shared key'}
+            >
+              <span className="text-[10px] font-black text-slate-500 uppercase block tracking-tighter">AI_AGENT</span>
+              <div className="flex items-center space-x-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_8px_#60a5fa]"></span>
+                <span className="text-xs font-bold uppercase tracking-widest text-blue-400">
+                  {aiSettings
+                    ? aiSettings.provider === 'anthropic' ? 'Claude'
+                      : aiSettings.provider === 'openai' ? 'OpenAI'
+                      : 'Gemini'
+                    : 'Shared'}
+                </span>
+              </div>
+              {/* Hover tooltip */}
+              <div className="absolute top-full right-0 mt-2 bg-slate-900 border border-slate-700 rounded-xl p-4 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity group-hover:pointer-events-auto pointer-events-none w-64 z-50">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Provider:</span>
+                    <span className="text-white capitalize">{aiSettings?.provider ?? 'Shared (app key)'}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Model:</span>
+                    <span className="text-white text-[10px] font-mono">{aiSettings?.model ?? 'Default'}</span>
+                  </div>
+                  {aiSettings && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Key:</span>
+                      <span className="text-slate-400 font-mono text-[10px]">{aiSettings.maskedKey}</span>
+                    </div>
+                  )}
+                  <div className="pt-2 border-t border-slate-800">
+                    <Link href="/settings" className="text-blue-400 hover:text-blue-300 text-xs">
+                      Change in Settings →
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          <div className="hidden sm:flex items-center gap-2 ml-2">
+            <Link
+              href="/settings"
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </Link>
+            <button
+              onClick={async () => {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                router.push('/sign-in');
+              }}
+              className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-all"
+              title="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </header>
 
         {/* Chat Feed */}
@@ -471,9 +550,23 @@ export default function WorkflowDashboard() {
           </div>
 
           {messages.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center text-slate-800 space-y-4 opacity-30">
-              <Bot className="w-16 h-16" />
-              <p className="text-xs font-black uppercase tracking-[0.4em]">Listening_for_kernel_prompts...</p>
+            <div className="h-full flex flex-col items-center justify-center space-y-6">
+              <div className="flex flex-col items-center text-slate-800 space-y-4 opacity-30">
+                <Bot className="w-16 h-16" />
+                <p className="text-xs font-black uppercase tracking-[0.4em]">Listening_for_kernel_prompts...</p>
+              </div>
+              {!qbStatus.connected && (
+                <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-4 max-w-sm text-center space-y-3">
+                  <p className="text-amber-400 text-sm font-medium">QuickBooks not connected</p>
+                  <p className="text-slate-500 text-xs">Connect QuickBooks so the AI can read your financial data.</p>
+                  <Link
+                    href="/settings"
+                    className="block bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 px-4 rounded-xl transition-all"
+                  >
+                    Connect in Settings
+                  </Link>
+                </div>
+              )}
             </div>
           )}
 

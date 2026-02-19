@@ -122,106 +122,91 @@ export class QuickBooksService {
     return response.json();
   }
 
+
   /**
-   * Save tokens to database
+   * Query QuickBooks data (legacy, not user-scoped - kept for internal use only)
    */
-  async saveConnection(data: {
+  async query<T>(query: string): Promise<T> {
+    throw new Error('Use queryForConnection(connection, query) instead');
+  }
+
+  /**
+   * Get sales receipts (legacy placeholder)
+   */
+  async getSalesReceipts(_startDate?: string, _endDate?: string) {
+    throw new Error('Use getSalesReceiptsForConnection instead');
+  }
+
+  /**
+   * Get invoices (legacy placeholder)
+   */
+  async getInvoices(_startDate?: string, _endDate?: string) {
+    throw new Error('Use getInvoicesForConnection instead');
+  }
+
+  /**
+   * Get payments (legacy placeholder)
+   */
+  async getPayments(_startDate?: string, _endDate?: string) {
+    throw new Error('Use getPaymentsForConnection instead');
+  }
+
+  /**
+   * Get valid access token for a specific user connection (auto-refreshes if needed)
+   */
+  async getValidAccessTokenForConnection(connection: {
+    id: string;
+    userId: string;
     realmId: string;
     accessToken: string;
     refreshToken: string;
-    expiresIn: number;
-    refreshExpiresIn: number;
-    companyName?: string;
-  }) {
-    const expiresAt = new Date(Date.now() + data.expiresIn * 1000);
-    const refreshExpiresAt = new Date(
-      Date.now() + data.refreshExpiresIn * 1000
-    );
-
-    return prisma.quickBooksConnection.upsert({
-      where: { realmId: data.realmId },
-      update: {
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-        expiresAt,
-        refreshExpiresAt,
-        companyName: data.companyName,
-        isActive: true,
-        updatedAt: new Date(),
-      },
-      create: {
-        realmId: data.realmId,
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
-        expiresAt,
-        refreshExpiresAt,
-        companyName: data.companyName,
-        isActive: true,
-      },
-    });
-  }
-
-  /**
-   * Get active connection
-   */
-  async getActiveConnection() {
-    return prisma.quickBooksConnection.findFirst({
-      where: { isActive: true },
-      orderBy: { updatedAt: 'desc' },
-    });
-  }
-
-  /**
-   * Get valid access token (refresh if needed)
-   */
-  async getValidAccessToken(): Promise<string | null> {
-    const connection = await this.getActiveConnection();
-    if (!connection) return null;
-
-    // Check if token is expired
+    expiresAt: Date;
+    refreshExpiresAt: Date;
+  }): Promise<{ accessToken: string; realmId: string }> {
     const now = new Date();
+
     if (connection.expiresAt > now) {
-      return connection.accessToken;
+      return { accessToken: connection.accessToken, realmId: connection.realmId };
     }
 
-    // Check if refresh token is expired
     if (connection.refreshExpiresAt <= now) {
-      throw new Error('Refresh token expired. Please reconnect to QuickBooks.');
+      throw new Error('QuickBooks session expired. Please reconnect in Settings.');
     }
 
-    // Refresh the token
     const tokens = await this.refreshAccessToken(connection.refreshToken);
 
-    // Save new tokens
-    await this.saveConnection({
-      realmId: connection.realmId,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresIn: tokens.expires_in,
-      refreshExpiresIn: tokens.x_refresh_token_expires_in,
+    await prisma.quickBooksConnection.update({
+      where: { id: connection.id },
+      data: {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+        refreshExpiresAt: new Date(Date.now() + tokens.x_refresh_token_expires_in * 1000),
+        updatedAt: new Date(),
+      },
     });
 
-    return tokens.access_token;
+    return { accessToken: tokens.access_token, realmId: connection.realmId };
   }
 
   /**
-   * Make authenticated API call to QuickBooks
+   * Make authenticated API call scoped to a specific user connection
    */
-  async makeRequest<T>(
+  async makeRequestForConnection<T>(
+    connection: {
+      id: string;
+      userId: string;
+      realmId: string;
+      accessToken: string;
+      refreshToken: string;
+      expiresAt: Date;
+      refreshExpiresAt: Date;
+    },
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const connection = await this.getActiveConnection();
-    if (!connection) {
-      throw new Error('No active QuickBooks connection');
-    }
-
-    const accessToken = await this.getValidAccessToken();
-    if (!accessToken) {
-      throw new Error('Failed to get valid access token');
-    }
-
-    const url = `${this.baseUrl}/v3/company/${connection.realmId}/${endpoint}`;
+    const { accessToken, realmId } = await this.getValidAccessTokenForConnection(connection);
+    const url = `${this.baseUrl}/v3/company/${realmId}/${endpoint}`;
 
     const response = await fetch(url, {
       ...options,
@@ -241,106 +226,98 @@ export class QuickBooksService {
     return response.json();
   }
 
-  /**
-   * Get company info
-   */
-  async getCompanyInfo() {
-    const connection = await this.getActiveConnection();
-    if (!connection) {
-      throw new Error('No active QuickBooks connection');
-    }
-
-    return this.makeRequest<any>(
-      `companyinfo/${connection.realmId}`
-    );
+  async queryForConnection<T>(connection: any, query: string): Promise<T> {
+    const encoded = encodeURIComponent(query);
+    return this.makeRequestForConnection<T>(connection, `query?query=${encoded}`);
   }
 
-  /**
-   * Test connection by making actual API call to QuickBooks
-   */
-  async testConnection(): Promise<boolean> {
-    try {
-      const connection = await this.getActiveConnection();
-      if (!connection) {
-        console.log('❌ No QuickBooks connection to test');
-        return false;
-      }
-
-      console.log(`🔄 Making API call to QuickBooks (realmId: ${connection.realmId})...`);
-      const companyInfo = await this.getCompanyInfo();
-
-      console.log('✅ QuickBooks API call successful:', {
-        companyName: companyInfo.CompanyInfo?.CompanyName,
-        country: companyInfo.CompanyInfo?.Country,
-      });
-
-      return true;
-    } catch (error: any) {
-      console.error('❌ QuickBooks API call failed:', {
-        error: error.message,
-        details: error.toString(),
-      });
-      return false;
-    }
+  async getCompanyInfoForConnection(connection: any) {
+    return this.makeRequestForConnection<any>(connection, `companyinfo/${connection.realmId}`);
   }
 
-  /**
-   * Query QuickBooks data
-   */
-  async query<T>(query: string): Promise<T> {
-    const encodedQuery = encodeURIComponent(query);
-    return this.makeRequest<T>(`query?query=${encodedQuery}`);
-  }
-
-  /**
-   * Get sales receipts
-   */
-  async getSalesReceipts(startDate?: string, endDate?: string) {
+  async getSalesReceiptsForConnection(connection: any, startDate?: string, endDate?: string) {
     let query = 'SELECT * FROM SalesReceipt';
-
     if (startDate && endDate) {
       query += ` WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}'`;
     } else if (startDate) {
       query += ` WHERE TxnDate >= '${startDate}'`;
     }
-
-    query += ' MAXRESULTS 1000';
-
-    return this.query<any>(query);
+    query += ' ORDERBY TxnDate DESC MAXRESULTS 50';
+    return this.queryForConnection<any>(connection, query);
   }
 
-  /**
-   * Get invoices
-   */
-  async getInvoices(startDate?: string, endDate?: string) {
+  async getInvoicesForConnection(connection: any, startDate?: string, endDate?: string) {
     let query = 'SELECT * FROM Invoice';
-
     if (startDate && endDate) {
       query += ` WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}'`;
     } else if (startDate) {
       query += ` WHERE TxnDate >= '${startDate}'`;
     }
+    query += ' ORDERBY TxnDate DESC MAXRESULTS 50';
+    return this.queryForConnection<any>(connection, query);
+  }
 
-    query += ' MAXRESULTS 1000';
+  async getUnpaidInvoicesForConnection(connection: any) {
+    // QB IDS does not support > or < operators, so we fetch all and filter client-side
+    const data = await this.queryForConnection<any>(
+      connection,
+      'SELECT * FROM Invoice MAXRESULTS 200'
+    );
+    const invoices: any[] = data?.QueryResponse?.Invoice || [];
+    const unpaid = invoices.filter(inv => parseFloat(inv.Balance || '0') > 0);
+    return {
+      QueryResponse: { Invoice: unpaid, maxResults: unpaid.length },
+    };
+  }
 
-    return this.query<any>(query);
+  async getPaymentsForConnection(connection: any, startDate?: string, endDate?: string) {
+    let query = 'SELECT * FROM Payment';
+    if (startDate && endDate) {
+      query += ` WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}'`;
+    } else if (startDate) {
+      query += ` WHERE TxnDate >= '${startDate}'`;
+    }
+    query += ' ORDERBY TxnDate DESC MAXRESULTS 50';
+    return this.queryForConnection<any>(connection, query);
   }
 
   /**
-   * Get payments
+   * Save connection scoped to a specific user
    */
-  async getPayments(startDate?: string, endDate?: string) {
-    let query = 'SELECT * FROM Payment';
+  async saveConnectionForUser(userId: string, data: {
+    realmId: string;
+    accessToken: string;
+    refreshToken: string;
+    expiresIn: number;
+    refreshExpiresIn: number;
+    companyName?: string;
+  }) {
+    const expiresAt = new Date(Date.now() + data.expiresIn * 1000);
+    const refreshExpiresAt = new Date(Date.now() + data.refreshExpiresIn * 1000);
 
-    if (startDate && endDate) {
-      query += ` WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}'`;
-    } else if (startDate) {
-      query += ` WHERE TxnDate >= '${startDate}'`;
-    }
-
-    query += ' MAXRESULTS 1000';
-
-    return this.query<any>(query);
+    return prisma.quickBooksConnection.upsert({
+      where: { userId },
+      update: {
+        realmId: data.realmId,
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        expiresAt,
+        refreshExpiresAt,
+        companyName: data.companyName,
+        isActive: true,
+        updatedAt: new Date(),
+      },
+      create: {
+        userId,
+        realmId: data.realmId,
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        expiresAt,
+        refreshExpiresAt,
+        companyName: data.companyName,
+        isActive: true,
+      },
+    });
   }
 }
 

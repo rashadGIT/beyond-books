@@ -1,20 +1,20 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getQuickBooksService } from '@/lib/quickbooksService';
-import { randomBytes } from 'crypto';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const userId = request.headers.get('x-user-id');
+    if (!userId) {
+      return NextResponse.redirect(new URL('/sign-in', request.url));
+    }
+
     const qbService = getQuickBooksService();
 
-    // Generate random state for CSRF protection
-    const state = randomBytes(16).toString('hex');
-
-    // Store state in session/cookie if needed for validation
-    // For now, we'll just generate the URL
+    // Encode userId into the OAuth state so the callback can recover it
+    const state = Buffer.from(JSON.stringify({ userId, ts: Date.now() })).toString('base64url');
 
     const authUrl = qbService.getAuthorizationUrl(state);
 
-    // Redirect to QuickBooks authorization page
     return NextResponse.redirect(authUrl);
   } catch (error: any) {
     console.error('QuickBooks connect error:', error);

@@ -61,9 +61,12 @@ export async function POST(request: NextRequest) {
       0
     );
 
+    const userId = request.headers.get('x-user-id') || 'anonymous';
+
     // Save to database
     const processedFile = await prisma.processedFile.create({
       data: {
+        userId,
         filename: file.name,
         source: parsedData.source,
         fileSize: file.size,

@@ -3,13 +3,17 @@ import { getQuickBooksService } from '@/lib/quickbooksService';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
+  const userId = request.headers.get('x-user-id');
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
-    const { startDate, endDate } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const { startDate, endDate } = body;
 
     const qbService = getQuickBooksService();
 
-    // Verify connection exists
-    const connection = await qbService.getActiveConnection();
+    // Verify connection exists for this user
+    const connection = await prisma.quickBooksConnection.findUnique({ where: { userId } });
     if (!connection) {
       return NextResponse.json(
         { error: 'No active QuickBooks connection' },
@@ -17,11 +21,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch sales receipts and invoices
+    // Fetch sales receipts, invoices, and payments
     const [salesReceipts, invoices, payments] = await Promise.all([
-      qbService.getSalesReceipts(startDate, endDate),
-      qbService.getInvoices(startDate, endDate),
-      qbService.getPayments(startDate, endDate),
+      qbService.getSalesReceiptsForConnection(connection, startDate, endDate),
+      qbService.getInvoicesForConnection(connection, startDate, endDate),
+      qbService.getPaymentsForConnection(connection, startDate, endDate),
     ]);
 
     // Transform and save to database
@@ -84,6 +88,7 @@ export async function POST(request: NextRequest) {
     // Create a processed file record
     const processedFile = await prisma.processedFile.create({
       data: {
+        userId,
         filename: `QuickBooks Sync ${new Date().toISOString()}`,
         source: 'quickbooks',
         fileSize: 0,
@@ -116,10 +121,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const userId = request.headers.get('x-user-id');
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   try {
-    const qbService = getQuickBooksService();
-    const connection = await qbService.getActiveConnection();
+    const connection = await prisma.quickBooksConnection.findUnique({ where: { userId } });
 
     if (!connection) {
       return NextResponse.json({

@@ -1,73 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getQuickBooksService } from '@/lib/quickbooksService';
+import { prisma } from '@/lib/prisma';
 
-export async function GET() {
-  try {
-    const qbService = getQuickBooksService();
-    const connection = await qbService.getActiveConnection();
+export async function GET(request: NextRequest) {
+  const userId = request.headers.get('x-user-id');
 
-    if (!connection) {
-      console.log('❌ No QuickBooks connection in database');
-      return NextResponse.json({
-        connected: false,
-        lastSyncAt: null,
-        error: 'No QuickBooks connection configured',
-        isStale: true,
-      });
-    }
-
-    console.log('🔍 Testing QuickBooks connection by calling API...');
-
-    // Make actual API call to QuickBooks to verify connection
-    const isConnected = await qbService.testConnection();
-
-    if (isConnected) {
-      console.log('✅ QuickBooks API responded successfully');
-    } else {
-      console.log('❌ QuickBooks API call failed');
-    }
-
-    return NextResponse.json({
-      connected: isConnected,
-      lastSyncAt: connection.lastSyncAt?.toISOString() || null,
-      companyName: connection.companyName,
-      realmId: connection.realmId,
-      error: isConnected ? null : 'Connection test failed',
-      isStale: false,
-    });
-  } catch (error: any) {
-    console.error('❌ QuickBooks status check error:', error);
-    return NextResponse.json({
-      connected: false,
-      lastSyncAt: null,
-      error: error.message,
-      isStale: true,
-    });
+  if (!userId) {
+    return NextResponse.json({ connected: false, error: 'Unauthorized' }, { status: 401 });
   }
-}
 
-// Keep POST for backward compatibility with n8n (if still using it)
-export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { heartbeat } = body;
+    const connection = await prisma.quickBooksConnection.findUnique({
+      where: { userId },
+    });
 
-    // If heartbeat from n8n, just return success
-    if (heartbeat) {
-      return NextResponse.json({
-        success: true,
-        message: 'Heartbeat received (using direct QB connection now)',
-      });
+    if (!connection || !connection.isActive) {
+      return NextResponse.json({ connected: false, companyName: null, lastSyncAt: null });
     }
 
     return NextResponse.json({
-      success: true,
-      message: 'Status endpoint is now using direct QuickBooks connection',
+      connected: true,
+      companyName: connection.companyName,
+      lastSyncAt: connection.lastSyncAt?.toISOString() || null,
+      realmId: connection.realmId,
     });
   } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ connected: false, error: error.message }, { status: 500 });
   }
 }

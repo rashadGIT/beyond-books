@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getQuickBooksService } from '@/lib/quickbooksService';
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,61 +10,74 @@ export async function GET(request: NextRequest) {
     const state = searchParams.get('state');
     const error = searchParams.get('error');
 
-    // Handle error from QuickBooks
     if (error) {
-      console.error('QuickBooks OAuth error:', error);
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_URL}/?qb_error=${encodeURIComponent(error)}`
+        `${process.env.NEXT_PUBLIC_URL}/settings?qb_error=${encodeURIComponent(error)}`
       );
     }
 
-    // Validate required parameters
-    if (!code || !realmId) {
+    if (!code || !realmId || !state) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_URL}/?qb_error=missing_parameters`
+        `${process.env.NEXT_PUBLIC_URL}/settings?qb_error=missing_parameters`
+      );
+    }
+
+    // Decode userId from state
+    let userId: string;
+    try {
+      const stateData = JSON.parse(Buffer.from(state, 'base64url').toString());
+      userId = stateData.userId;
+      if (!userId) throw new Error('No userId in state');
+    } catch {
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_URL}/settings?qb_error=invalid_state`
       );
     }
 
     const qbService = getQuickBooksService();
 
-    // Exchange code for tokens
     const tokens = await qbService.getAccessToken(code);
 
-    // Save connection to database first
-    await qbService.saveConnection({
-      realmId: realmId,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresIn: tokens.expires_in,
-      refreshExpiresIn: tokens.x_refresh_token_expires_in,
+    // Ensure user record exists (first-time QB connect before DB user created)
+    await prisma.user.upsert({
+      where: { id: userId },
+      update: {},
+      create: { id: userId, email: `${userId}@unknown.local` },
     });
 
-    // Now test the connection by getting company info
-    const companyInfo = await qbService.getCompanyInfo();
-
-    // Update with company name
-    await qbService.saveConnection({
-      realmId: realmId,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresIn: tokens.expires_in,
-      refreshExpiresIn: tokens.x_refresh_token_expires_in,
-      companyName: companyInfo.CompanyInfo?.CompanyName || 'Unknown',
-    });
-
-    console.log('✅ QuickBooks connected successfully:', {
+    // Save connection scoped to this user
+    await qbService.saveConnectionForUser(userId, {
       realmId,
-      companyName: companyInfo.CompanyInfo?.CompanyName,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresIn: tokens.expires_in,
+      refreshExpiresIn: tokens.x_refresh_token_expires_in,
     });
 
-    // Redirect to dashboard with success message
+    // Fetch company name
+    const connection = await prisma.quickBooksConnection.findUnique({ where: { userId } });
+    if (connection) {
+      try {
+        const companyInfo = await qbService.getCompanyInfoForConnection(connection);
+        const companyName = companyInfo?.CompanyInfo?.CompanyName;
+        if (companyName) {
+          await prisma.quickBooksConnection.update({
+            where: { userId },
+            data: { companyName },
+          });
+        }
+      } catch {
+        // Non-critical — connection saved, company name is just cosmetic
+      }
+    }
+
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_URL}/?qb_connected=true`
+      `${process.env.NEXT_PUBLIC_URL}/settings?qb_connected=true`
     );
   } catch (error: any) {
     console.error('QuickBooks callback error:', error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_URL}/?qb_error=${encodeURIComponent(error.message)}`
+      `${process.env.NEXT_PUBLIC_URL}/settings?qb_error=${encodeURIComponent(error.message)}`
     );
   }
 }
