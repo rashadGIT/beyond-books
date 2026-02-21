@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateAIResponse, AIMessage, AIOverride } from '@/lib/aiProviders';
-import { QB_TOOLS } from '@/app/api/mcp/route';
+import type { AITool } from '@/lib/aiProviders';
+import { createQbMcpClient } from '@/lib/qbMcpExecutor';
 
 function buildSystemPrompt() {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -73,9 +74,16 @@ export async function POST(request: NextRequest) {
       .reverse()
       .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }));
 
-    // Check if QB is connected — only pass tools if it is
+    // Build in-process MCP client if QB is connected — dynamic tool discovery, no static list
     const qbConnection = await prisma.quickBooksConnection.findUnique({ where: { userId } });
-    const tools = qbConnection ? QB_TOOLS : [];
+    const mcpClient = qbConnection ? await createQbMcpClient(qbConnection) : null;
+    const tools: AITool[] = mcpClient
+      ? (await mcpClient.listTools()).tools.map(t => ({
+          name: t.name,
+          description: t.description ?? '',
+          inputSchema: t.inputSchema as AITool['inputSchema'],
+        }))
+      : [];
 
     // Load user's personal AI settings if they have one saved
     const userAISettings = await prisma.aISettings.findFirst({ where: { userId, isActive: true } });
@@ -104,40 +112,36 @@ export async function POST(request: NextRequest) {
         break;
       }
 
-      // Execute each tool call via the MCP route
+      // Execute each tool call via in-process MCP
       const toolResults: Array<{ id: string; name: string; content: string }> = [];
+      const MAX_RESULT_CHARS = 12_000;
 
       for (const toolCall of aiResponse.toolCalls) {
         let resultContent: string;
-        try {
-          const mcpRes = await fetch(`${process.env.NEXT_PUBLIC_URL}/api/mcp`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-user-id': userId,
-            },
-            body: JSON.stringify({ tool: toolCall.name, input: toolCall.input }),
-          });
 
-          const mcpData = await mcpRes.json();
-
-          if (mcpData.error) {
-            console.error(`[chat] Tool "${toolCall.name}" error:`, mcpData.error);
-            resultContent = `Tool "${toolCall.name}" failed: ${mcpData.error}`;
-          } else {
-            console.log(`[chat] Tool "${toolCall.name}" succeeded, result keys:`, Object.keys(mcpData.result || {}));
-            const resultStr = JSON.stringify(mcpData.result, null, 2);
-            // Cap at ~12 000 chars (~3 000 tokens) to stay within model context limits
-            const MAX_RESULT_CHARS = 12_000;
-            const truncated = resultStr.length > MAX_RESULT_CHARS
-              ? resultStr.slice(0, MAX_RESULT_CHARS) + '\n... [truncated — too many results]'
-              : resultStr;
-            resultContent = `Tool "${toolCall.name}" result:\n${truncated}`;
-          }
-        } catch (toolErr: any) {
-          console.error(`[chat] Tool "${toolCall.name}" fetch error:`, toolErr?.message);
-          resultContent = `Tool "${toolCall.name}" encountered an error: ${toolErr?.message}`;
+        if (!mcpClient) {
+          resultContent = `Tool "${toolCall.name}" failed: QuickBooks is not connected.`;
+          toolResults.push({ id: toolCall.id, name: toolCall.name, content: resultContent });
+          continue;
         }
+
+        try {
+          const resultObj = await mcpClient.callTool({
+            name: toolCall.name,
+            arguments: toolCall.input as Record<string, unknown>,
+          });
+          const rawText = (resultObj.content as Array<{ type: string; text: string }>)?.[0]?.text
+            ?? JSON.stringify(resultObj);
+          const truncated = rawText.length > MAX_RESULT_CHARS
+            ? rawText.slice(0, MAX_RESULT_CHARS) + '\n... [truncated — too many results]'
+            : rawText;
+          resultContent = `Tool "${toolCall.name}" result:\n${truncated}`;
+        } catch (toolErr) {
+          const msg = toolErr instanceof Error ? toolErr.message : String(toolErr);
+          console.error(`[chat/mcp] Tool "${toolCall.name}" error:`, msg);
+          resultContent = `Tool "${toolCall.name}" failed: ${msg}`;
+        }
+
         toolResults.push({ id: toolCall.id, name: toolCall.name, content: resultContent });
       }
 
@@ -160,6 +164,8 @@ export async function POST(request: NextRequest) {
         });
       }
     }
+
+    if (mcpClient) await mcpClient.close();
 
     if (!finalContent) {
       finalContent = 'I was unable to complete your request. Please try again.';

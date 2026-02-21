@@ -23,14 +23,12 @@ export interface AIResponse {
   toolCalls?: Array<{ id: string; name: string; input: Record<string, unknown> }>;
 }
 
-function getProviderConfig() {
+function getProviderConfig(): { provider: AIProvider; apiKey: string; model: string | undefined } | null {
   const provider = (process.env.AI_PROVIDER || 'anthropic') as AIProvider;
   const apiKey = process.env.AI_API_KEY;
   const model = process.env.AI_MODEL;
 
-  if (!apiKey) {
-    throw new Error('AI_API_KEY environment variable is not set. Please configure the AI provider.');
-  }
+  if (!apiKey) return null;
 
   return { provider, apiKey, model };
 }
@@ -47,7 +45,11 @@ export async function generateAIResponse(
   tools: AITool[],
   override?: AIOverride
 ): Promise<AIResponse> {
-  const { provider, apiKey, model } = override ?? getProviderConfig();
+  const config = override ?? getProviderConfig();
+  if (!config) {
+    throw new Error('No AI key configured. Go to Settings → AI Configuration and add your API key.');
+  }
+  const { provider, apiKey, model } = config;
 
   switch (provider) {
     case 'anthropic':

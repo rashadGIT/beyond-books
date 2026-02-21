@@ -68,7 +68,7 @@ web_modules/
 # dotenv environment variable files
 .env
 .env.*
-.env.example
+!.env.example
 
 # Database files (contains QuickBooks OAuth tokens and donor data)
 *.db

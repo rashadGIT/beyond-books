@@ -26,15 +26,18 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { MarkdownMessage } from '@/components/MarkdownMessage';
 
 type AIStatus = 'idle' | 'thinking' | 'working';
 
 interface Job {
   id: string;
-  type: string;
+  prompt: string;        // AI prompt
   label: string;
   schedule: string;
   frequency?: string;
+  cronExpression?: string;
+  isActive?: boolean;
   lastRunAt?: string;
 }
 
@@ -84,7 +87,7 @@ export default function WorkflowDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isCreatingJob, setIsCreatingJob] = useState(false);
-  const [newJob, setNewJob] = useState({ type: 'DATA_FETCH', label: '', schedule: '09:00 AM', frequency: 'DAILY' });
+  const [newJob, setNewJob] = useState({ prompt: '', label: '', schedule: '09:00 AM', frequency: 'DAILY' });
 
   const fetchData = async () => {
     try {
@@ -146,16 +149,25 @@ export default function WorkflowDashboard() {
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await fetch('/api/jobs', {
+      const response = await fetch('/api/jobs', {
         method: 'POST',
         body: JSON.stringify(newJob),
         headers: { 'Content-Type': 'application/json' }
       });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to create job:', error);
+        alert(`Error: ${error.error || 'Failed to create job'}`);
+        return;
+      }
+
       setIsCreatingJob(false);
-      setNewJob({ type: 'DATA_FETCH', label: '', schedule: '09:00 AM', frequency: 'DAILY' });
+      setNewJob({ prompt: '', label: '', schedule: '09:00 AM', frequency: 'DAILY' });
       fetchData();
     } catch (err) {
-      console.error('Failed to create job');
+      console.error('Failed to create job:', err);
+      alert('Failed to create job. Check console for details.');
     }
   };
 
@@ -309,30 +321,38 @@ export default function WorkflowDashboard() {
           <form onSubmit={handleCreateJob} className="bg-slate-900 border border-blue-500/30 p-4 rounded-2xl space-y-3 animate-in fade-in slide-in-from-top-2 mb-4">
             <div>
               <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Task Label</label>
-              <input 
+              <input
                 type="text" required value={newJob.label}
                 onChange={(e) => setNewJob({...newJob, label: e.target.value})}
-                placeholder="e.g., Audit Stripe"
+                placeholder="e.g., Monthly Donor Summary"
                 className="w-full bg-black/40 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">AI Prompt</label>
+              <textarea
+                required
+                value={newJob.prompt}
+                onChange={(e) => setNewJob({...newJob, prompt: e.target.value})}
+                placeholder="e.g., Show me all donations from last month over $100"
+                rows={3}
+                className="w-full bg-black/40 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-none"
               />
             </div>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Type</label>
-                  <select 
-                    value={newJob.type}
-                    onChange={(e) => setNewJob({...newJob, type: e.target.value})}
+                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Schedule</label>
+                  <input
+                    type="text" value={newJob.schedule}
+                    onChange={(e) => setNewJob({...newJob, schedule: e.target.value})}
+                    placeholder="09:00 AM"
                     className="w-full bg-black/40 border border-slate-800 rounded-lg px-2 py-2 text-[10px] text-white focus:outline-none"
-                  >
-                    <option value="DATA_FETCH">DATA_FETCH</option>
-                    <option value="IDENTITY_SYNC">IDENTITY_SYNC</option>
-                    <option value="REPORT_GEN">REPORT_GEN</option>
-                  </select>
+                  />
                 </div>
                 <div>
                   <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Frequency</label>
-                  <select 
+                  <select
                     value={newJob.frequency}
                     onChange={(e) => setNewJob({...newJob, frequency: e.target.value})}
                     className="w-full bg-black/40 border border-slate-800 rounded-lg px-2 py-2 text-[10px] text-white focus:outline-none"
@@ -343,18 +363,9 @@ export default function WorkflowDashboard() {
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Schedule</label>
-                <input 
-                  type="text" value={newJob.schedule}
-                  onChange={(e) => setNewJob({...newJob, schedule: e.target.value})}
-                  placeholder="09:00 AM"
-                  className="w-full bg-black/40 border border-slate-800 rounded-lg px-2 py-2 text-[10px] text-white focus:outline-none"
-                />
-              </div>
             </div>
             <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/20">
-              Commit to Queue
+              Schedule AI Task
             </button>
           </form>
         )}
@@ -364,16 +375,26 @@ export default function WorkflowDashboard() {
           {jobs.map(job => (
             <div key={job.id} className="bg-slate-900/50 border border-slate-800 p-4 rounded-2xl group hover:border-blue-500/30 transition-all shadow-sm">
               <div className="flex justify-between items-start mb-3">
-                <span className="text-[9px] font-bold text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded uppercase">{job.type}</span>
-                <button onClick={() => handleManualRun(job.id, job.label)} className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-all shadow-lg" disabled={status !== 'idle'}>
+                <div className="flex items-center gap-2">
+                  {job.isActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]" title="Active (scheduled)"></span>
+                  )}
+                </div>
+                <button onClick={() => handleManualRun(job.id, job.label)} className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-all shadow-lg" disabled={status !== 'idle'} title="Run manually">
                   <Play className="w-3 h-3 fill-current" />
                 </button>
               </div>
-              <p className="text-sm font-semibold text-slate-200">{job.label}</p>
+              <p className="text-sm font-semibold text-slate-200 mb-2">{job.label}</p>
+              <p className="text-xs text-slate-400 mb-2 italic line-clamp-2">{job.prompt.slice(0, 80)}{job.prompt.length > 80 ? '...' : ''}</p>
               <div className="flex items-center text-[10px] text-slate-500 mt-2 space-x-4">
                 <span className="flex items-center"><Clock className="w-3 h-3 mr-1" /> {job.schedule}</span>
                 <span className="text-blue-400/60 font-bold tracking-tighter">{job.frequency}</span>
               </div>
+              {job.lastRunAt && (
+                <div className="text-[9px] text-slate-600 mt-2">
+                  Last: {new Date(job.lastRunAt).toLocaleString()}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -410,16 +431,16 @@ export default function WorkflowDashboard() {
               </p>
             </div>
           </div>
-          <div className="hidden sm:flex items-center space-x-4">
-            <div className="bg-slate-800/50 px-4 py-2 rounded-xl border border-slate-700">
-              <span className="text-[10px] font-black text-slate-500 uppercase block tracking-tighter">API_STATUS</span>
+          <div className="hidden sm:flex items-center gap-2 ml-auto">
+            <div className="bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700">
+              <span className="text-[9px] font-black text-slate-500 uppercase block tracking-tighter">API_STATUS</span>
               <span className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Stable</span>
             </div>
             <div
-              className="bg-slate-800/50 px-4 py-2 rounded-xl border border-slate-700 cursor-pointer relative group"
+              className="bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700 cursor-pointer relative group"
               title={qbStatus.lastSyncAt ? `Last sync: ${new Date(qbStatus.lastSyncAt).toLocaleString()}` : 'No sync data'}
             >
-              <span className="text-[10px] font-black text-slate-500 uppercase block tracking-tighter">QUICKBOOKS</span>
+              <span className="text-[9px] font-black text-slate-500 uppercase block tracking-tighter">QUICKBOOKS</span>
               <div className="flex items-center space-x-2">
                 <span className={`w-1.5 h-1.5 rounded-full ${
                   qbStatus.connected
@@ -432,7 +453,7 @@ export default function WorkflowDashboard() {
                   {qbStatus.connected ? 'Connected' : 'Offline'}
                 </span>
               </div>
-              <div className="absolute top-full right-0 mt-2 bg-slate-900 border border-slate-700 rounded-xl p-4 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity group-hover:pointer-events-auto pointer-events-none w-64 z-50">
+              <div className="absolute top-full right-0 mt-0 pt-2 bg-slate-900 border border-slate-700 rounded-xl px-4 pb-4 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto w-64 z-50">
                 <div className="space-y-3">
                   <div className="flex justify-between text-xs">
                     <span className="text-slate-500">Status:</span>
@@ -478,14 +499,12 @@ export default function WorkflowDashboard() {
                 </div>
               </div>
             </div>
-          </div>
-
             {/* AI Assistant status box */}
             <div
-              className="hidden sm:block bg-slate-800/50 px-4 py-2 rounded-xl border border-slate-700 cursor-pointer relative group"
+              className="bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700 cursor-pointer relative group"
               title={aiSettings ? `${aiSettings.provider} · ${aiSettings.model}` : 'Using shared key'}
             >
-              <span className="text-[10px] font-black text-slate-500 uppercase block tracking-tighter">AI_AGENT</span>
+              <span className="text-[9px] font-black text-slate-500 uppercase block tracking-tighter">AI_AGENT</span>
               <div className="flex items-center space-x-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_8px_#60a5fa]"></span>
                 <span className="text-xs font-bold uppercase tracking-widest text-blue-400">
@@ -497,7 +516,7 @@ export default function WorkflowDashboard() {
                 </span>
               </div>
               {/* Hover tooltip */}
-              <div className="absolute top-full right-0 mt-2 bg-slate-900 border border-slate-700 rounded-xl p-4 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity group-hover:pointer-events-auto pointer-events-none w-64 z-50">
+              <div className="absolute top-full right-0 mt-0 pt-2 bg-slate-900 border border-slate-700 rounded-xl px-4 pb-4 shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto w-64 z-50">
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs">
                     <span className="text-slate-500">Provider:</span>
@@ -521,8 +540,9 @@ export default function WorkflowDashboard() {
                 </div>
               </div>
             </div>
+          </div>
 
-          <div className="hidden sm:flex items-center gap-2 ml-2">
+          <div className="hidden sm:flex items-center gap-2">
             <Link
               href="/settings"
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
@@ -584,12 +604,12 @@ export default function WorkflowDashboard() {
                 }`}>
                   {msg.role === 'user' ? 'ME' : 'AI'}
                 </div>
-                <div className={`p-6 rounded-[2.5rem] leading-relaxed text-sm shadow-2xl whitespace-pre-wrap ${
-                  msg.role === 'user' 
-                  ? 'bg-blue-600/10 border border-blue-500/20 text-white rounded-tr-none' 
+                <div className={`p-6 rounded-[2.5rem] leading-relaxed text-sm shadow-2xl ${
+                  msg.role === 'user'
+                  ? 'bg-blue-600/10 border border-blue-500/20 text-white rounded-tr-none'
                   : 'bg-slate-900 border border-slate-800 text-slate-300 rounded-tl-none'
                 }`}>
-                  {msg.content}
+                  <MarkdownMessage content={msg.content} role={msg.role} />
                 </div>
               </div>
             </div>

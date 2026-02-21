@@ -14,6 +14,7 @@ model User {
   id           String                @id // Cognito sub
   email        String                @unique
   name         String?
+  mcpToken     String?               // Random token for external MCP server access
   createdAt    DateTime              @default(now())
   qbConnection QuickBooksConnection?
   chatMessages ChatMessage[]
@@ -37,17 +38,19 @@ model AISettings {
 }
 
 model ScheduledJob {
-  id          String         @id @default(cuid())
-  userId      String
-  user        User           @relation(fields: [userId], references: [id])
-  type        String
-  label       String
-  schedule    String
-  frequency   String         @default("DAILY")
-  lastRunAt   DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  executions  JobExecution[]
+  id             String         @id @default(cuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id])
+  prompt         String                              // AI prompt to execute (e.g., "Show donations from last month")
+  label          String                              // Human-readable name for UI
+  schedule       String                              // Display time: "09:00 AM"
+  frequency      String         @default("DAILY")    // "HOURLY" | "DAILY" | "WEEKLY"
+  cronExpression String?        @map("cron_expression")  // Cron format: "0 9 * * *"
+  isActive       Boolean        @default(true)       // Enable/disable toggle
+  lastRunAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  executions     JobExecution[]
 }
 
 model JobExecution {

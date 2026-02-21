@@ -6,7 +6,7 @@ const PUBLIC_PATHS = [
   '/sign-up',
   '/api/auth/',
   '/api/quickbooks/callback',
-  '/api/mcp',        // called server-to-server from /api/chat; protected by x-user-id check inside route
+  '/api/scheduler/init',  // AWS EventBridge trigger
   '/_next/',
   '/favicon.ico',
 ];
