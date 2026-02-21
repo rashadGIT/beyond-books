@@ -1,0 +1,155 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String                @id // Cognito sub
+  email        String                @unique
+  name         String?
+  mcpToken     String?               // Random token for external MCP server access
+  createdAt    DateTime              @default(now())
+  qbConnection QuickBooksConnection?
+  chatMessages ChatMessage[]
+  files        ProcessedFile[]
+  jobs         ScheduledJob[]
+  aiSettings   AISettings[]
+}
+
+model AISettings {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  provider  String   // "anthropic" | "openai" | "google"
+  apiKey    String
+  model     String
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, provider])
+}
+
+model ScheduledJob {
+  id             String         @id @default(cuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id])
+  prompt         String                              // AI prompt to execute (e.g., "Show donations from last month")
+  label          String                              // Human-readable name for UI
+  schedule       String                              // Display time: "09:00 AM"
+  frequency      String         @default("DAILY")    // "HOURLY" | "DAILY" | "WEEKLY"
+  cronExpression String?        @map("cron_expression")  // Cron format: "0 9 * * *"
+  isActive       Boolean        @default(true)       // Enable/disable toggle
+  lastRunAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  executions     JobExecution[]
+}
+
+model JobExecution {
+  id          String       @id @default(cuid())
+  jobId       String
+  job         ScheduledJob @relation(fields: [jobId], references: [id])
+  status      String
+  result      String?
+  latency     String?
+  retryCount  Int          @default(0)
+  startedAt   DateTime     @default(now())
+  completedAt DateTime?
+}
+
+model ProcessedFile {
+  id               String                @id @default(cuid())
+  userId           String
+  user             User                  @relation(fields: [userId], references: [id])
+  filename         String
+  source           String
+  uploadedAt       DateTime              @default(now())
+  fileSize         Int
+  transactionCount Int
+  totalAmount      Float
+  filePath         String?
+  fileContent      String?
+  transactions     DonationTransaction[]
+}
+
+model DonationTransaction {
+  id            String          @id @default(cuid())
+  fileId        String
+  file          ProcessedFile   @relation(fields: [fileId], references: [id])
+  transactionId String
+  date          String
+  source        String
+  donorName     String
+  donorEmail    String
+  grossAmount   Float
+  fee           Float
+  netAmount     Float
+  description   String
+  originalData  String
+  createdAt     DateTime        @default(now())
+  letters       DonationLetter[]
+}
+
+model DonationLetter {
+  id           String                @id @default(cuid())
+  donorName    String
+  donorEmail   String
+  totalAmount  Float
+  dateRange    String
+  isSummary    Boolean               @default(false)
+  transactions DonationTransaction[]
+  pdfPath      String?
+  pdfGenerated Boolean               @default(false)
+  emailSent    Boolean               @default(false)
+  emailSentAt  DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+}
+
+model EmailLog {
+  id            String   @id @default(cuid())
+  recipient     String
+  recipientName String
+  subject       String
+  status        String
+  letterId      String?
+  errorMessage  String?
+  sentAt        DateTime @default(now())
+}
+
+model ChatMessage {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  role           String
+  content        String
+  timestamp      DateTime @default(now())
+  hasAttachment  Boolean  @default(false)
+  attachmentType String?
+  fileId         String?
+}
+
+model QuickBooksConnection {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id])
+  realmId          String
+  accessToken      String
+  refreshToken     String
+  tokenType        String    @default("Bearer")
+  expiresAt        DateTime
+  refreshExpiresAt DateTime
+  companyName      String?
+  lastSyncAt       DateTime?
+  isActive         Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}

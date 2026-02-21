@@ -1,0 +1,133 @@
+{
+  "name": "QuickBooks Heartbeat Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 1 Minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "resource": "companyInfo",
+        "operation": "get"
+      },
+      "id": "quickbooks-test",
+      "name": "QuickBooks - Test Connection",
+      "type": "n8n-nodes-base.quickbooks",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "id": "YOUR_QB_CREDENTIAL_ID",
+          "name": "QuickBooks OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.error }}",
+              "operation": "isEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-success",
+      "name": "Success Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrations/quickbooks/status",
+        "options": {},
+        "bodyParametersJson": "={\n  \"heartbeat\": true,\n  \"connected\": true,\n  \"lastSyncAt\": \"{{ $now.toISO() }}\"\n}"
+      },
+      "id": "update-status-success",
+      "name": "Update Status - Connected",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrations/quickbooks/status",
+        "options": {},
+        "bodyParametersJson": "={\n  \"connected\": false,\n  \"error\": \"{{ $json.error?.message || 'QuickBooks connection failed' }}\"\n}"
+      },
+      "id": "update-status-error",
+      "name": "Update Status - Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "Every 1 Minute": {
+      "main": [
+        [
+          {
+            "node": "QuickBooks - Test Connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QuickBooks - Test Connection": {
+      "main": [
+        [
+          {
+            "node": "Success Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Check": {
+      "main": [
+        [
+          {
+            "node": "Update Status - Connected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Status - Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-02-15T00:00:00.000Z",
+  "versionId": "1"
+}

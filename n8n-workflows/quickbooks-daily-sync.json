@@ -1,0 +1,271 @@
+{
+  "name": "QuickBooks Daily Transaction Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "daily-trigger",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "notes": "Runs once per day"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrations/quickbooks/status",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connected",
+              "value": "=true"
+            },
+            {
+              "name": "lastSyncAt",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "notify-sync-start",
+      "name": "Notify Sync Started",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "resource": "salesReceipt",
+        "operation": "getAll",
+        "returnAll": true,
+        "options": {
+          "query": "SELECT * FROM SalesReceipt WHERE TxnDate >= '{{ $now.minus({days: 30}).toFormat('yyyy-MM-dd') }}'"
+        }
+      },
+      "id": "get-sales-receipts",
+      "name": "Get Sales Receipts (Last 30 Days)",
+      "type": "n8n-nodes-base.quickbooks",
+      "typeVersion": 1,
+      "position": [650, 200],
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "id": "YOUR_QB_CREDENTIAL_ID",
+          "name": "QuickBooks OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "invoice",
+        "operation": "getAll",
+        "returnAll": true,
+        "options": {
+          "query": "SELECT * FROM Invoice WHERE TxnDate >= '{{ $now.minus({days: 30}).toFormat('yyyy-MM-dd') }}'"
+        }
+      },
+      "id": "get-invoices",
+      "name": "Get Invoices (Last 30 Days)",
+      "type": "n8n-nodes-base.quickbooks",
+      "typeVersion": 1,
+      "position": [650, 400],
+      "credentials": {
+        "quickBooksOAuth2Api": {
+          "id": "YOUR_QB_CREDENTIAL_ID",
+          "name": "QuickBooks OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex"
+      },
+      "id": "merge-data",
+      "name": "Merge All Transactions",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform QuickBooks data to Beyond Books format\nconst items = $input.all();\n\nreturn items.map(item => {\n  const qb = item.json;\n  \n  // Determine if it's invoice or sales receipt\n  const isInvoice = qb.Balance !== undefined;\n  \n  return {\n    json: {\n      transactionId: qb.Id,\n      date: qb.TxnDate || qb.MetaData?.CreateTime,\n      source: 'quickbooks',\n      donorName: qb.CustomerRef?.name || qb.CustomerMemo || 'Unknown',\n      donorEmail: qb.BillEmail?.Address || qb.CustomerRef?.value || '',\n      grossAmount: parseFloat(qb.TotalAmt || 0),\n      fee: 0, // QuickBooks doesn't track fees\n      netAmount: parseFloat(qb.TotalAmt || 0),\n      description: isInvoice ? 'Invoice' : 'Sales Receipt',\n      originalData: qb\n    }\n  };\n});"
+      },
+      "id": "transform-data",
+      "name": "Transform to Beyond Books Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/quickbooks/sync",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { transactions: $json } }}",
+        "options": {}
+      },
+      "id": "send-to-app",
+      "name": "Send to Beyond Books API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 300],
+      "notes": "You'll need to create this endpoint"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrations/quickbooks/status",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connected",
+              "value": "=true"
+            },
+            {
+              "name": "lastSyncAt",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-success",
+      "name": "Update Status - Sync Complete",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/integrations/quickbooks/status",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connected",
+              "value": "=false"
+            },
+            {
+              "name": "error",
+              "value": "={{ $json.error?.message || 'Sync failed' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "update-error",
+      "name": "Update Status - Sync Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1450, 500]
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Notify Sync Started",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Sync Started": {
+      "main": [
+        [
+          {
+            "node": "Get Sales Receipts (Last 30 Days)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Invoices (Last 30 Days)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sales Receipts (Last 30 Days)": {
+      "main": [
+        [
+          {
+            "node": "Merge All Transactions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Invoices (Last 30 Days)": {
+      "main": [
+        [
+          {
+            "node": "Merge All Transactions",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge All Transactions": {
+      "main": [
+        [
+          {
+            "node": "Transform to Beyond Books Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform to Beyond Books Format": {
+      "main": [
+        [
+          {
+            "node": "Send to Beyond Books API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Beyond Books API": {
+      "main": [
+        [
+          {
+            "node": "Update Status - Sync Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-02-15T00:00:00.000Z",
+  "versionId": "1"
+}
