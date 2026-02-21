@@ -100,7 +100,7 @@ export default function WorkflowDashboard() {
       
       setJobs(jobsData.jobs || []);
       setHistory(jobsData.history || []);
-      setMessages(chatData || []);
+      setMessages(Array.isArray(chatData) ? chatData : []);
     } catch (err) {
       console.error('Data sync failed:', err);
     } finally {
