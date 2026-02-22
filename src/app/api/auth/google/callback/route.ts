@@ -8,14 +8,16 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code');
   const error = searchParams.get('error');
 
+  const appUrl = process.env.NEXT_PUBLIC_URL!;
+
   if (error) {
     return NextResponse.redirect(
-      new URL(`/sign-in?error=${encodeURIComponent(error)}`, request.url)
+      new URL(`/sign-in?error=${encodeURIComponent(error)}`, appUrl)
     );
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL('/sign-in?error=missing_code', request.url));
+    return NextResponse.redirect(new URL('/sign-in?error=missing_code', appUrl));
   }
 
   try {
@@ -38,7 +40,7 @@ export async function GET(request: NextRequest) {
     if (!tokenRes.ok) {
       const err = await tokenRes.text();
       console.error('Token exchange failed:', err);
-      return NextResponse.redirect(new URL('/sign-in?error=token_exchange_failed', request.url));
+      return NextResponse.redirect(new URL('/sign-in?error=token_exchange_failed', appUrl));
     }
 
     const tokens = await tokenRes.json();
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
       path: '/',
     };
 
-    const response = NextResponse.redirect(new URL('/', request.url));
+    const response = NextResponse.redirect(new URL('/', appUrl));
 
     response.cookies.set('access_token', tokens.access_token, {
       ...cookieOpts,
@@ -86,6 +88,6 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (err: any) {
     console.error('Google callback error:', err);
-    return NextResponse.redirect(new URL('/sign-in?error=auth_failed', request.url));
+    return NextResponse.redirect(new URL('/sign-in?error=auth_failed', appUrl));
   }
 }
