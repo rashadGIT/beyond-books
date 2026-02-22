@@ -34,6 +34,12 @@ export default function SignInPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Unverified account flow
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [verifyCode, setVerifyCode] = useState('');
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -49,7 +55,11 @@ export default function SignInPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Sign in failed');
+        if (data.error?.includes('verify your email')) {
+          setNeedsVerification(true);
+        } else {
+          setError(data.error || 'Sign in failed. Please try again.');
+        }
         return;
       }
 
@@ -61,6 +71,106 @@ export default function SignInPage() {
       setLoading(false);
     }
   };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code: verifyCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Verification failed.'); return; }
+      // Now sign in
+      const loginRes = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (loginRes.ok) {
+        router.push('/');
+        router.refresh();
+      } else {
+        router.push('/sign-in?verified=true');
+      }
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResendLoading(true);
+    setResendMessage('');
+    try {
+      const res = await fetch('/api/auth/resend-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      setResendMessage(data.message || 'Code resent.');
+    } catch {
+      setResendMessage('Failed to resend. Please try again.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  if (needsVerification) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-bold text-white">Beyond Books</h1>
+            <p className="text-slate-400 text-sm mt-1">Verify your email to continue</p>
+          </div>
+          <form onSubmit={handleVerify} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-red-400 text-sm">{error}</div>
+            )}
+            <p className="text-slate-400 text-sm">
+              A verification code was sent to <span className="text-white">{email}</span>. Enter it below to activate your account.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Verification code</label>
+              <input
+                type="text"
+                value={verifyCode}
+                onChange={e => setVerifyCode(e.target.value)}
+                required
+                maxLength={6}
+                className="w-full bg-black/40 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 tracking-widest text-center"
+                placeholder="123456"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-bold transition-all"
+            >
+              {loading ? 'Verifying...' : 'Verify & Sign In'}
+            </button>
+            <div className="flex items-center justify-between text-xs">
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendLoading}
+                className="text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-50"
+              >
+                {resendLoading ? 'Sending...' : 'Resend code'}
+              </button>
+              {resendMessage && <span className="text-emerald-400">{resendMessage}</span>}
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center p-4">
@@ -91,7 +201,12 @@ export default function SignInPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">Password</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-slate-400">Password</label>
+              <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">
+                Forgot password?
+              </Link>
+            </div>
             <input
               type="password"
               value={password}

@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Clock,
   CheckCircle2,
-  Zap,
   BrainCircuit,
   Cpu,
   Send,
@@ -14,13 +13,9 @@ import {
   Menu,
   X,
   Play,
-  ShieldCheck,
   Bot,
-  User,
-  Loader2,
   Paperclip,
   AlertCircle,
-  Database,
   Settings,
   LogOut,
 } from 'lucide-react';
@@ -61,14 +56,14 @@ export default function WorkflowDashboard() {
   const router = useRouter();
   const [status, setStatus] = useState<AIStatus>('idle');
   const [userInput, setUserInput] = useState('');
-  const [currentQuery, setCurrentQuery] = useState<string | null>(null);
+  const [, setCurrentQuery] = useState<string | null>(null);
   const [activeMobileTab, setActiveTab] = useState<'queue' | 'ai' | 'output'>('ai');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [history, setHistory] = useState<Execution[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
   const [isTyping, setIsTyping] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +77,7 @@ export default function WorkflowDashboard() {
     model: string;
     maskedKey: string;
   } | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -134,13 +130,22 @@ export default function WorkflowDashboard() {
         const res = await fetch('/api/settings/ai');
         const data = await res.json();
         // API now returns an array; pick the active one
-        const active = Array.isArray(data) ? data.find((s: any) => s.isActive) ?? null : null;
+        const active = Array.isArray(data) ? data.find((s: { isActive?: boolean }) => s.isActive) ?? null : null;
         setAiSettings(active);
+      } catch {}
+    };
+
+    const fetchMe = async () => {
+      try {
+        const res = await fetch('/api/auth/me');
+        const data = await res.json();
+        setUserName(data.name || data.email || null);
       } catch {}
     };
 
     fetchQBStatus();
     fetchAISettings();
+    fetchMe();
 
     const interval = setInterval(fetchQBStatus, 60000);
     return () => clearInterval(interval);
@@ -191,7 +196,7 @@ export default function WorkflowDashboard() {
       setCurrentQuery(null);
       fetchData();
       return execution.result;
-    } catch (err) {
+    } catch {
       setStatus('idle');
       setCurrentQuery(null);
       return "Execution error.";
@@ -240,8 +245,8 @@ export default function WorkflowDashboard() {
       }).then(r => r.json());
 
       setMessages(prev => [...prev, savedAssistantMsg]);
-    } catch (err: any) {
-      setError('File upload failed: ' + err.message);
+    } catch (err) {
+      setError('File upload failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setUploadingFile(false);
       if (fileInputRef.current) {
@@ -276,8 +281,8 @@ export default function WorkflowDashboard() {
       // Update messages with both user and assistant messages
       setMessages(prev => [...prev, data.userMessage, data.assistantMessage]);
       setStatus('idle');
-    } catch (err: any) {
-      setError('Communication error: ' + err.message);
+    } catch (err) {
+      setError('Communication error: ' + (err instanceof Error ? err.message : 'Unknown error'));
       setStatus('idle');
     } finally {
       setIsTyping(false);
@@ -543,6 +548,11 @@ export default function WorkflowDashboard() {
           </div>
 
           <div className="hidden sm:flex items-center gap-2">
+            {userName && (
+              <span className="text-xs text-slate-400 px-2">
+                Signed in as <span className="text-slate-200 font-medium">{userName}</span>
+              </span>
+            )}
             <Link
               href="/settings"
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"

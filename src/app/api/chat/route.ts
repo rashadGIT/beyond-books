@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { generateAIResponse, AIMessage, AIOverride } from '@/lib/aiProviders';
 import type { AITool } from '@/lib/aiProviders';
 import { createQbMcpClient } from '@/lib/qbMcpExecutor';
+import { JobService } from '@/lib/jobService';
 
 function buildSystemPrompt() {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -16,8 +17,27 @@ If a tool call fails or returns an error, include the exact error message in you
 
 QuickBooks IDS query language limitations for run_custom_query: only supports WHERE operators =, !=, LIKE, IN, BETWEEN, CONTAINS. It does NOT support > or < comparisons. To find unpaid invoices (Balance > 0), use the get_unpaid_invoices tool instead of a custom query.
 
+You also have the ability to create scheduled reports for the user using the create_scheduled_job tool.
+When a user asks you to schedule, automate, or set up a recurring report or task — use the create_scheduled_job tool to create it for them immediately. Do NOT tell the user to set up schedules manually anywhere. You handle scheduling directly.
+After creating a job, confirm to the user what was scheduled, how often it will run, and what it will report on.
+
 Today's date is ${today} (${isoDate}). Use this when interpreting relative dates like "this month", "last month", "this year", "recent", etc.`;
 }
+
+const CREATE_SCHEDULED_JOB_TOOL: AITool = {
+  name: 'create_scheduled_job',
+  description: 'Create a recurring scheduled report or task that runs automatically. Use this whenever the user asks to schedule, automate, or set up a recurring report. Do not tell the user to do this manually.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      label: { type: 'string', description: "Short friendly name, e.g. 'Weekly Donor Summary'" },
+      prompt: { type: 'string', description: "The AI prompt that will run on schedule, e.g. 'Summarize all payments received this week and list the top 5 donors by amount'" },
+      frequency: { type: 'string', enum: ['DAILY', 'WEEKLY', 'HOURLY'], description: 'How often to run' },
+      schedule: { type: 'string', description: "Time to run in 12-hour format, e.g. '09:00 AM'" },
+    },
+    required: ['label', 'prompt', 'frequency', 'schedule'],
+  },
+};
 
 const MAX_TOOL_ITERATIONS = 5;
 
@@ -77,13 +97,14 @@ export async function POST(request: NextRequest) {
     // Build in-process MCP client if QB is connected — dynamic tool discovery, no static list
     const qbConnection = await prisma.quickBooksConnection.findUnique({ where: { userId } });
     const mcpClient = qbConnection ? await createQbMcpClient(qbConnection) : null;
-    const tools: AITool[] = mcpClient
+    const qbTools: AITool[] = mcpClient
       ? (await mcpClient.listTools()).tools.map(t => ({
           name: t.name,
           description: t.description ?? '',
           inputSchema: t.inputSchema as AITool['inputSchema'],
         }))
       : [];
+    const tools: AITool[] = [...qbTools, CREATE_SCHEDULED_JOB_TOOL];
 
     // Load user's personal AI settings if they have one saved
     const userAISettings = await prisma.aISettings.findFirst({ where: { userId, isActive: true } });
@@ -118,6 +139,25 @@ export async function POST(request: NextRequest) {
 
       for (const toolCall of aiResponse.toolCalls) {
         let resultContent: string;
+
+        // Handle Beyond Books native tools first
+        if (toolCall.name === 'create_scheduled_job') {
+          try {
+            const input = toolCall.input as { label: string; prompt: string; frequency: string; schedule: string };
+            const job = await JobService.createJob(userId, {
+              label: input.label,
+              prompt: input.prompt,
+              frequency: input.frequency,
+              schedule: input.schedule,
+            });
+            resultContent = `Scheduled job created successfully. Job ID: ${job.id}. Label: "${job.label}". Runs ${job.frequency?.toLowerCase()} at ${job.schedule}.`;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            resultContent = `Failed to create scheduled job: ${msg}`;
+          }
+          toolResults.push({ id: toolCall.id, name: toolCall.name, content: resultContent });
+          continue;
+        }
 
         if (!mcpClient) {
           resultContent = `Tool "${toolCall.name}" failed: QuickBooks is not connected.`;

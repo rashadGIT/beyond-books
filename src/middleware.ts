@@ -4,6 +4,7 @@ import { verifyTokenEdge } from '@/lib/auth-edge';
 const PUBLIC_PATHS = [
   '/sign-in',
   '/sign-up',
+  '/forgot-password',
   '/api/auth/',
   '/api/quickbooks/callback',
   '/api/scheduler/init',  // AWS EventBridge trigger
