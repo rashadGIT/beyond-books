@@ -7,7 +7,7 @@ export interface CognitoUser {
   name?: string;
 }
 
-const REGION = process.env.AWS_REGION!;
+const REGION = 'us-east-1';
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID!;
 
 let jwksCache: { keys: JsonWebKey[] } | null = null;

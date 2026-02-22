@@ -7,7 +7,7 @@ import { StandardizedTransaction } from '@/lib/types';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
-const s3 = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
+const s3 = new S3Client({ region: 'us-east-1' });
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     // Upload to S3
     const s3Key = `uploads/${Date.now()}-${file.name}`;
     await s3.send(new PutObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET,
+      Bucket: process.env.BB_S3_BUCKET,
       Key: s3Key,
       Body: buffer,
       ContentType: file.type || 'application/octet-stream',

@@ -6,7 +6,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { BrandingConfig } from './types';
 
-const s3 = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
+const s3 = new S3Client({ region: 'us-east-1' });
 
 export class PDFService {
 
@@ -248,7 +248,7 @@ export class PDFService {
     // Upload to S3
     const s3Key = `pdfs/letter-${donorName.replace(/\s+/g, '-')}-${Date.now()}.pdf`;
     await s3.send(new PutObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET,
+      Bucket: process.env.BB_S3_BUCKET,
       Key: s3Key,
       Body: pdfBuffer,
       ContentType: 'application/pdf',
@@ -262,7 +262,7 @@ export class PDFService {
     return getSignedUrl(
       s3,
       new GetObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET,
+        Bucket: process.env.BB_S3_BUCKET,
         Key: s3Key,
       }),
       { expiresIn: 3600 }
