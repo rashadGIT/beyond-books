@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   '/api/auth/',
   '/api/quickbooks/callback',
   '/api/scheduler/init',  // AWS EventBridge trigger
+  '/api/health',
   '/_next/',
   '/favicon.ico',
 ];
