@@ -5,7 +5,8 @@ export async function GET() {
   try {
     await prisma.$queryRaw`SELECT 1`;
     return NextResponse.json({ status: 'ok', db: 'connected' });
-  } catch {
-    return NextResponse.json({ status: 'error', db: 'disconnected' }, { status: 503 });
+  } catch (e: any) {
+    console.error('[health] DB error:', e?.message ?? e);
+    return NextResponse.json({ status: 'error', db: 'disconnected', message: e?.message }, { status: 503 });
   }
 }
