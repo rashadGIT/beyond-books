@@ -5,26 +5,6 @@ frontend:
       commands:
         - npm ci
         - npx prisma generate
-        # Write server-side env vars into .env.production.local so Next.js
-        # loads them at Lambda startup (Amplify Gen 1 doesn't pass env vars
-        # to the Lambda process environment automatically).
-        - echo "DATABASE_URL=${DATABASE_URL}" >> .env.production.local
-        - echo "COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}" >> .env.production.local
-        - echo "COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}" >> .env.production.local
-        - echo "COGNITO_DOMAIN=${COGNITO_DOMAIN}" >> .env.production.local
-        - echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}" >> .env.production.local
-        - echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}" >> .env.production.local
-        - echo "QUICKBOOKS_CLIENT_ID=${QUICKBOOKS_CLIENT_ID}" >> .env.production.local
-        - echo "QUICKBOOKS_CLIENT_SECRET=${QUICKBOOKS_CLIENT_SECRET}" >> .env.production.local
-        - echo "QUICKBOOKS_ENVIRONMENT=${QUICKBOOKS_ENVIRONMENT}" >> .env.production.local
-        - echo "QUICKBOOKS_REDIRECT_URI=${QUICKBOOKS_REDIRECT_URI}" >> .env.production.local
-        - echo "BB_S3_BUCKET=${BB_S3_BUCKET}" >> .env.production.local
-        - echo "CRON_SECRET=${CRON_SECRET}" >> .env.production.local
-        - echo "SCHEDULER_TIMEZONE=${SCHEDULER_TIMEZONE}" >> .env.production.local
-        - echo "DISABLE_SCHEDULER=${DISABLE_SCHEDULER}" >> .env.production.local
-        - echo "AI_PROVIDER=${AI_PROVIDER}" >> .env.production.local
-        - echo "AI_API_KEY=${AI_API_KEY}" >> .env.production.local
-        - echo "AI_MODEL=${AI_MODEL}" >> .env.production.local
     build:
       commands:
         - npm run build
