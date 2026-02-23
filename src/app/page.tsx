@@ -309,14 +309,9 @@ export default function WorkflowDashboard() {
       ]);
       fetchData(); // refresh jobs in case AI created one
       setStatus('idle');
-<<<<<<< HEAD
-    } catch (err: any) {
-      setMessages(prev => prev.filter(m => m.id !== optimisticId));
-      setError('Communication error: ' + err.message);
-=======
     } catch (err) {
+      setMessages(prev => prev.filter(m => m.id !== optimisticId));
       setError('Communication error: ' + (err instanceof Error ? err.message : 'Unknown error'));
->>>>>>> master
       setStatus('idle');
     } finally {
       setIsTyping(false);
@@ -530,7 +525,7 @@ export default function WorkflowDashboard() {
                             const data = await res.json();
                             alert(`Synced ${data.transactionCount} transactions`);
                             fetchData();
-                          } catch (err) {
+                          } catch {
                             alert('Sync failed');
                           }
                         }}

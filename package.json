@@ -26,11 +26,7 @@
     "openai": "^6.22.0",
     "papaparse": "^5.5.3",
     "prisma": "^6.2.1",
-<<<<<<< HEAD
-    "puppeteer": "^24.37.5",
-=======
     "puppeteer-core": "^24.37.5",
->>>>>>> master
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
@@ -44,7 +40,6 @@
     "@types/node": "^20",
     "@types/node-cron": "^3.0.11",
     "@types/papaparse": "^5.5.2",
-    "@types/puppeteer": "^5.4.7",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-syntax-highlighter": "^15.5.13",
