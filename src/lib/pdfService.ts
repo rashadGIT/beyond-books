@@ -1,15 +1,14 @@
-import puppeteer from 'puppeteer';
+import chromium from '@sparticuz/chromium-min';
+import puppeteer from 'puppeteer-core';
 import { prisma } from './prisma';
-import path from 'path';
-import { mkdir } from 'fs/promises';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { BrandingConfig } from './types';
 
-const PDF_DIR = path.join(process.cwd(), 'generated-pdfs');
+const s3 = new S3Client({ region: 'us-east-1' });
 
 export class PDFService {
-  private static async ensurePdfDir() {
-    await mkdir(PDF_DIR, { recursive: true });
-  }
 
   // Generate HTML from letter template
   private static generateLetterHTML(
@@ -200,7 +199,7 @@ export class PDFService {
     `.trim();
   }
 
-  // Generate PDF from HTML
+  // Generate PDF from HTML and upload to S3, returns S3 key
   static async generatePDF(
     donorName: string,
     donorEmail: string,
@@ -210,8 +209,6 @@ export class PDFService {
     donations?: any[],
     branding?: BrandingConfig
   ): Promise<string> {
-    await this.ensurePdfDir();
-
     const html = this.generateLetterHTML(
       donorName,
       donorEmail,
@@ -222,19 +219,19 @@ export class PDFService {
       branding
     );
 
-    const fileName = `letter-${donorName.replace(/\s+/g, '-')}-${Date.now()}.pdf`;
-    const filePath = path.join(PDF_DIR, fileName);
-
     const browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(
+        process.env.CHROMIUM_PATH ?? undefined
+      ),
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
+    let pdfBuffer: Buffer;
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
-      await page.pdf({
-        path: filePath,
+      pdfBuffer = Buffer.from(await page.pdf({
         format: 'Letter',
         printBackground: true,
         margin: {
@@ -243,12 +240,33 @@ export class PDFService {
           bottom: '0.5in',
           left: '0.5in',
         },
-      });
-
-      return filePath;
+      }));
     } finally {
       await browser.close();
     }
+
+    // Upload to S3
+    const s3Key = `pdfs/letter-${donorName.replace(/\s+/g, '-')}-${Date.now()}.pdf`;
+    await s3.send(new PutObjectCommand({
+      Bucket: process.env.BB_S3_BUCKET,
+      Key: s3Key,
+      Body: pdfBuffer,
+      ContentType: 'application/pdf',
+    }));
+
+    return s3Key; // Return S3 key (stored in DB)
+  }
+
+  // Generate a presigned download URL for a PDF stored in S3 (valid 1 hour)
+  static async getPresignedUrl(s3Key: string): Promise<string> {
+    return getSignedUrl(
+      s3,
+      new GetObjectCommand({
+        Bucket: process.env.BB_S3_BUCKET,
+        Key: s3Key,
+      }),
+      { expiresIn: 3600 }
+    );
   }
 
   // Generate a general-purpose report PDF from a title + plain text/markdown content

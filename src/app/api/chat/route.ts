@@ -77,8 +77,8 @@ export async function GET(request: NextRequest) {
       orderBy: { timestamp: 'asc' },
     });
     return NextResponse.json(messages);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }
 
@@ -149,8 +149,8 @@ export async function POST(request: NextRequest) {
       let aiResponse;
       try {
         aiResponse = await generateAIResponse(buildSystemPrompt(), loopMessages, tools, aiOverride);
-      } catch (aiError: any) {
-        finalContent = `I'm having trouble connecting to the AI service. Please check the AI configuration. (${aiError.message})`;
+      } catch (aiError: unknown) {
+        finalContent = `I'm having trouble connecting to the AI service. Please check the AI configuration. (${(aiError as Error).message})`;
         break;
       }
 
@@ -169,8 +169,9 @@ export async function POST(request: NextRequest) {
         if (toolCall.name === 'generate_report_pdf') {
           try {
             const input = toolCall.input as { title: string; content: string };
-            const fileName = await PDFService.generateReportPDF(input.title, input.content);
-            resultContent = `PDF generated successfully. [Download "${input.title}"]( /api/reports/pdf?file=${encodeURIComponent(fileName)})`;
+            const s3Key = await PDFService.generateReportPDF(input.title, input.content);
+            const downloadUrl = await PDFService.getPresignedUrl(s3Key);
+            resultContent = `PDF generated successfully. [Download "${input.title}"](${downloadUrl})`;
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             resultContent = `Failed to generate PDF: ${msg}`;
@@ -276,8 +277,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ userMessage, assistantMessage });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }
 
@@ -288,7 +289,7 @@ export async function DELETE(request: NextRequest) {
   try {
     await prisma.chatMessage.deleteMany({ where: { userId } });
     return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }

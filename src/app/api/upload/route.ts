@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { processCSV, processExcel } from '@/lib/parser';
-import { writeFile, mkdir } from 'fs/promises';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import path from 'path';
 import { StandardizedTransaction } from '@/lib/types';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
+
+const s3 = new S3Client({ region: 'us-east-1' });
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,15 +36,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Ensure upload directory exists
-    await mkdir(UPLOAD_DIR, { recursive: true });
-
-    // Save file to disk
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const fileName = `${Date.now()}-${file.name}`;
-    const filePath = path.join(UPLOAD_DIR, fileName);
-    await writeFile(filePath, buffer);
+
+    // Upload to S3
+    const s3Key = `uploads/${Date.now()}-${file.name}`;
+    await s3.send(new PutObjectCommand({
+      Bucket: process.env.BB_S3_BUCKET,
+      Key: s3Key,
+      Body: buffer,
+      ContentType: file.type || 'application/octet-stream',
+    }));
 
     // Process the file
     let parsedData;
@@ -51,7 +54,6 @@ export async function POST(request: NextRequest) {
       const content = buffer.toString('utf-8');
       parsedData = processCSV(content);
     } else {
-      // For Excel files, use existing processExcel from parser
       parsedData = await processExcel(file);
     }
 
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
         fileSize: file.size,
         transactionCount: parsedData.transactions.length,
         totalAmount,
-        filePath,
+        filePath: s3Key, // Store S3 key instead of local path
         transactions: {
           create: parsedData.transactions.map((tx: StandardizedTransaction) => ({
             transactionId: tx.id,

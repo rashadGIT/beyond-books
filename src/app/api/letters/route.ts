@@ -116,8 +116,21 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const letterId = searchParams.get('download');
+
+    // Return a presigned S3 URL for a specific letter's PDF
+    if (letterId) {
+      const letter = await prisma.donationLetter.findUnique({ where: { id: letterId } });
+      if (!letter?.pdfPath) {
+        return NextResponse.json({ error: 'PDF not found' }, { status: 404 });
+      }
+      const url = await PDFService.getPresignedUrl(letter.pdfPath);
+      return NextResponse.json({ url });
+    }
+
     const letters = await prisma.donationLetter.findMany({
       include: {
         transactions: true,

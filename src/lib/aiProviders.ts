@@ -24,7 +24,7 @@ export interface AIResponse {
 }
 
 function getProviderConfig(): { provider: AIProvider; apiKey: string; model: string | undefined } | null {
-  const provider = (process.env.AI_PROVIDER || 'anthropic') as AIProvider;
+  const provider = (process.env.AI_PROVIDER || 'openai') as AIProvider;
   const apiKey = process.env.AI_API_KEY;
   const model = process.env.AI_MODEL;
 

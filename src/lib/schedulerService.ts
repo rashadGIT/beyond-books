@@ -9,7 +9,7 @@ import { prisma } from './prisma';
 interface SchedulerTask {
   jobId: string;
   cronExpression: string;
-  task: cron.ScheduledTask;
+  task: ReturnType<typeof cron.schedule>;
 }
 
 class JobScheduler {
@@ -76,8 +76,7 @@ class JobScheduler {
         }
       },
       {
-        scheduled: true,
-        timezone: process.env.SCHEDULER_TIMEZONE || 'America/New_York',
+        timezone: process.env.SCHEDULER_TIMEZONE || 'America/Chicago',
       }
     );
 

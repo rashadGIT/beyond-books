@@ -5,11 +5,14 @@ import {
   ConfirmSignUpCommand,
   GlobalSignOutCommand,
   GetUserCommand,
+  ForgotPasswordCommand,
+  ConfirmForgotPasswordCommand,
+  ResendConfirmationCodeCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { JwksClient } from 'jwks-rsa';
 import jwt from 'jsonwebtoken';
 
-const REGION = process.env.AWS_REGION!;
+const REGION = 'us-east-1';
 const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID!;
 const CLIENT_ID = process.env.COGNITO_CLIENT_ID!;
 
@@ -88,6 +91,32 @@ export async function verifyToken(token: string): Promise<CognitoUser | null> {
   } catch {
     return null;
   }
+}
+
+export async function forgotPassword(email: string) {
+  const command = new ForgotPasswordCommand({
+    ClientId: CLIENT_ID,
+    Username: email,
+  });
+  return cognitoClient.send(command);
+}
+
+export async function confirmForgotPassword(email: string, code: string, newPassword: string) {
+  const command = new ConfirmForgotPasswordCommand({
+    ClientId: CLIENT_ID,
+    Username: email,
+    ConfirmationCode: code,
+    Password: newPassword,
+  });
+  return cognitoClient.send(command);
+}
+
+export async function resendConfirmationCode(email: string) {
+  const command = new ResendConfirmationCodeCommand({
+    ClientId: CLIENT_ID,
+    Username: email,
+  });
+  return cognitoClient.send(command);
 }
 
 export async function getUserFromAccessToken(accessToken: string): Promise<CognitoUser | null> {
