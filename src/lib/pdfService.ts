@@ -271,8 +271,6 @@ export class PDFService {
 
   // Generate a general-purpose report PDF from a title + plain text/markdown content
   static async generateReportPDF(title: string, content: string): Promise<string> {
-    await this.ensurePdfDir();
-
     // Convert basic markdown to HTML
     const bodyHtml = content
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -302,28 +300,37 @@ export class PDFService {
 </body>
 </html>`;
 
-    const slug = title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
-    const fileName = `report-${slug}-${Date.now()}.pdf`;
-    const filePath = path.join(PDF_DIR, fileName);
-
     const browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(
+        process.env.CHROMIUM_PATH ?? undefined
+      ),
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
+    let pdfBuffer: Buffer;
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
-      await page.pdf({
-        path: filePath,
+      pdfBuffer = Buffer.from(await page.pdf({
         format: 'Letter',
         printBackground: true,
         margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
-      });
-      return fileName;
+      }));
     } finally {
       await browser.close();
     }
+
+    const slug = title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
+    const s3Key = `pdfs/report-${slug}-${Date.now()}.pdf`;
+    await s3.send(new PutObjectCommand({
+      Bucket: process.env.BB_S3_BUCKET,
+      Key: s3Key,
+      Body: pdfBuffer,
+      ContentType: 'application/pdf',
+    }));
+
+    return s3Key;
   }
 
   // Generate letter and save to database
