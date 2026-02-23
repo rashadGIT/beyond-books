@@ -23,6 +23,7 @@ import {
   Database,
   Settings,
   LogOut,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -146,6 +147,20 @@ export default function WorkflowDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleDeleteJob = async (jobId: string) => {
+    if (!confirm('Delete this scheduled task?')) return;
+    try {
+      await fetch('/api/jobs', {
+        method: 'DELETE',
+        body: JSON.stringify({ jobId }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      fetchData();
+    } catch (err) {
+      console.error('Failed to delete job:', err);
+    }
+  };
+
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -258,11 +273,19 @@ export default function WorkflowDashboard() {
     setUserInput('');
     setError(null);
 
+    // Show message immediately — don't wait for AI response
+    const optimisticId = `optimistic-${Date.now()}`;
+    setMessages(prev => [...prev, {
+      id: optimisticId,
+      role: 'user' as const,
+      content,
+      timestamp: new Date().toISOString(),
+    }]);
+
     try {
       setIsTyping(true);
-      setStatus('thinking'); // Keep for visual status indicator
+      setStatus('thinking');
 
-      // Call enhanced API - returns both messages
       const res = await fetch('/api/chat', {
         method: 'POST',
         body: JSON.stringify({ role: 'user', content }),
@@ -273,10 +296,16 @@ export default function WorkflowDashboard() {
 
       const data = await res.json();
 
-      // Update messages with both user and assistant messages
-      setMessages(prev => [...prev, data.userMessage, data.assistantMessage]);
+      // Replace optimistic message with real persisted messages
+      setMessages(prev => [
+        ...prev.filter(m => m.id !== optimisticId),
+        data.userMessage,
+        data.assistantMessage,
+      ]);
+      fetchData(); // refresh jobs in case AI created one
       setStatus('idle');
     } catch (err: any) {
+      setMessages(prev => prev.filter(m => m.id !== optimisticId));
       setError('Communication error: ' + err.message);
       setStatus('idle');
     } finally {
@@ -374,20 +403,25 @@ export default function WorkflowDashboard() {
           <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Scheduled Tasks</h3>
           {jobs.map(job => (
             <div key={job.id} className="bg-slate-900/50 border border-slate-800 p-4 rounded-2xl group hover:border-blue-500/30 transition-all shadow-sm">
-              <div className="flex justify-between items-start mb-3">
-                <div className="flex items-center gap-2">
+              <div className="flex justify-between items-center mb-3">
+                <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
                   {job.isActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]" title="Active (scheduled)"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e] shrink-0" title="Active (scheduled)"></span>
                   )}
+                  <p className="text-sm font-semibold text-slate-200 truncate">{job.label}</p>
                 </div>
-                <button onClick={() => handleManualRun(job.id, job.label)} className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-all shadow-lg" disabled={status !== 'idle'} title="Run manually">
-                  <Play className="w-3 h-3 fill-current" />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => handleDeleteJob(job.id)} className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-all" title="Delete task">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                  <button onClick={() => handleManualRun(job.id, job.label)} className="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-500 transition-all shadow-lg" disabled={status !== 'idle'} title="Run manually">
+                    <Play className="w-3 h-3 fill-current" />
+                  </button>
+                </div>
               </div>
-              <p className="text-sm font-semibold text-slate-200 mb-2">{job.label}</p>
               <p className="text-xs text-slate-400 mb-2 italic line-clamp-2">{job.prompt.slice(0, 80)}{job.prompt.length > 80 ? '...' : ''}</p>
               <div className="flex items-center text-[10px] text-slate-500 mt-2 space-x-4">
-                <span className="flex items-center"><Clock className="w-3 h-3 mr-1" /> {job.schedule}</span>
+                <span className="flex items-center"><Clock className="w-3 h-3 mr-1" /> {formatScheduleTime(job.schedule)}</span>
                 <span className="text-blue-400/60 font-bold tracking-tighter">{job.frequency}</span>
               </div>
               {job.lastRunAt && (
@@ -701,6 +735,20 @@ export default function WorkflowDashboard() {
 
     </div>
   );
+}
+
+function formatScheduleTime(schedule: string): string {
+  // Already has AM/PM — return as-is
+  if (/AM|PM/i.test(schedule)) return schedule;
+  // Convert 24-hour "HH:MM" to 12-hour AM/PM
+  const match = schedule.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return schedule;
+  let hour = parseInt(match[1]);
+  const min = match[2];
+  const period = hour >= 12 ? 'PM' : 'AM';
+  if (hour === 0) hour = 12;
+  else if (hour > 12) hour -= 12;
+  return `${hour}:${min} ${period}`;
 }
 
 function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {

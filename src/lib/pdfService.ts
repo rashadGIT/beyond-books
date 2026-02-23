@@ -251,6 +251,63 @@ export class PDFService {
     }
   }
 
+  // Generate a general-purpose report PDF from a title + plain text/markdown content
+  static async generateReportPDF(title: string, content: string): Promise<string> {
+    await this.ensurePdfDir();
+
+    // Convert basic markdown to HTML
+    const bodyHtml = content
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/^#{1,3}\s+(.+)$/gm, '<h3>$1</h3>')
+      .replace(/\n{2,}/g, '</p><p>')
+      .replace(/\n/g, '<br>');
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 48px; line-height: 1.7; color: #1e293b; }
+    h1 { color: #2563eb; font-size: 26px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-bottom: 6px; }
+    h3 { color: #334155; margin-top: 20px; }
+    .meta { color: #64748b; font-size: 12px; margin-bottom: 32px; }
+    p { margin: 0 0 12px; }
+    strong { color: #0f172a; }
+  </style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <div class="meta">Generated ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+  <p>${bodyHtml}</p>
+</body>
+</html>`;
+
+    const slug = title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
+    const fileName = `report-${slug}-${Date.now()}.pdf`;
+    const filePath = path.join(PDF_DIR, fileName);
+
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      await page.pdf({
+        path: filePath,
+        format: 'Letter',
+        printBackground: true,
+        margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
+      });
+      return fileName;
+    } finally {
+      await browser.close();
+    }
+  }
+
   // Generate letter and save to database
   static async createDonationLetter(
     donorName: string,
