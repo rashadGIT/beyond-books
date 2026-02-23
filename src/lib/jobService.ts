@@ -156,6 +156,12 @@ export const JobService = {
   ) => {
     const frequency = data.frequency || 'DAILY';
 
+    // Enforce unique label per user
+    const existing = await prisma.scheduledJob.findFirst({
+      where: { userId, label: data.label },
+    });
+    if (existing) throw new Error(`A scheduled task named "${data.label}" already exists.`);
+
     // Generate cron expression if not provided
     const cronExpression = data.cronExpression || parseScheduleToCron(data.schedule, frequency);
 
@@ -225,7 +231,8 @@ export const JobService = {
     const { scheduler } = await import('./schedulerService');
     scheduler.unscheduleJob(jobId);
 
-    // Delete from DB
+    // Delete execution history first (FK constraint), then the job
+    await prisma.jobExecution.deleteMany({ where: { jobId } });
     await prisma.scheduledJob.delete({ where: { id: jobId } });
   },
 
