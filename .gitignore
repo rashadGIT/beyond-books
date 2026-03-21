@@ -193,3 +193,13 @@ quickbooks-exports/
 qb-data/
 
 /src/generated/prisma
+.instructions/
+BATCH_TRANSACTIONS/
+EXCEL IMPORT WIZARD/
+Intelligence/
+Requested Features/
+Spredsheet Sync/
+CLIENT_EMAIL_BRANDIE.md
+GUIDE.md
+PROJECT_COST_ESTIMATE.md
+SALES_PROPOSAL.md
