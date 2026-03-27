@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ['pdfkit'],
   // Expose server-side env vars at build time so they're available in
   // Amplify Gen 1 SSR Lambda (which doesn't pass Console env vars to runtime).
   // Next.js inlines these via webpack DefinePlugin into the server bundle.
@@ -22,6 +23,7 @@ const nextConfig: NextConfig = {
     AI_PROVIDER: process.env.AI_PROVIDER ?? '',
     AI_API_KEY: process.env.AI_API_KEY ?? '',
     AI_MODEL: process.env.AI_MODEL ?? '',
+    SES_FROM_EMAIL: process.env.SES_FROM_EMAIL ?? '',
   },
 };
 

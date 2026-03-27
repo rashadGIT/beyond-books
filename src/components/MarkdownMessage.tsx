@@ -13,7 +13,7 @@ interface MarkdownMessageProps {
 
 export function MarkdownMessage({ content, role }: MarkdownMessageProps) {
   return (
-    <div className={`markdown-content ${role === 'user' ? 'user-message' : 'assistant-message'}`}>
+    <div className={`markdown-content min-w-0 overflow-hidden ${role === 'user' ? 'user-message' : 'assistant-message'}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -39,7 +39,7 @@ export function MarkdownMessage({ content, role }: MarkdownMessageProps) {
               </SyntaxHighlighter>
             ) : (
               <code
-                className="bg-slate-800 text-blue-300 px-1.5 py-0.5 rounded text-sm font-mono"
+                className="bg-slate-800 text-blue-300 px-1.5 py-0.5 rounded text-sm font-mono break-all"
                 {...props}
               >
                 {children}

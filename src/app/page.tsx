@@ -16,13 +16,12 @@ import {
   Bot,
   Paperclip,
   AlertCircle,
-  Settings,
-  LogOut,
   Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+
 import { MarkdownMessage } from '@/components/MarkdownMessage';
+import { AppNav } from '@/components/AppNav';
 
 type AIStatus = 'idle' | 'thinking' | 'working';
 
@@ -54,7 +53,6 @@ interface Message {
 }
 
 export default function WorkflowDashboard() {
-  const router = useRouter();
   const [status, setStatus] = useState<AIStatus>('idle');
   const [userInput, setUserInput] = useState('');
   const [, setCurrentQuery] = useState<string | null>(null);
@@ -587,23 +585,7 @@ export default function WorkflowDashboard() {
                 Signed in as <span className="text-slate-200 font-medium">{userName}</span>
               </span>
             )}
-            <Link
-              href="/settings"
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
-              title="Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </Link>
-            <button
-              onClick={async () => {
-                await fetch('/api/auth/logout', { method: 'POST' });
-                router.push('/sign-in');
-              }}
-              className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-all"
-              title="Sign out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <AppNav />
           </div>
         </header>
 
@@ -648,7 +630,7 @@ export default function WorkflowDashboard() {
                 }`}>
                   {msg.role === 'user' ? 'ME' : 'AI'}
                 </div>
-                <div className={`p-6 rounded-[2.5rem] leading-relaxed text-sm shadow-2xl ${
+                <div className={`p-6 rounded-[2.5rem] leading-relaxed text-sm shadow-2xl min-w-0 overflow-hidden ${
                   msg.role === 'user'
                   ? 'bg-blue-600/10 border border-blue-500/20 text-white rounded-tr-none'
                   : 'bg-slate-900 border border-slate-800 text-slate-300 rounded-tl-none'
@@ -674,12 +656,12 @@ export default function WorkflowDashboard() {
         <div className="p-10 z-20 shrink-0">
           <div className="max-w-3xl mx-auto relative group">
             <div className="absolute inset-0 bg-blue-600/20 rounded-[2rem] blur-2xl group-focus-within:bg-blue-600/40 transition-all opacity-0 group-focus-within:opacity-100"></div>
-            <form onSubmit={handleSendMessage} className="relative flex items-center bg-[#1E293B] border border-slate-700 rounded-[2.2rem] px-8 py-5 shadow-2xl focus-within:border-blue-500/50 transition-all">
+            <form onSubmit={handleSendMessage} className="relative flex items-start bg-[#1E293B] border border-slate-700 rounded-[2.2rem] px-8 py-5 shadow-2xl focus-within:border-blue-500/50 transition-all">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingFile}
-                className="p-2 text-slate-600 hover:text-blue-500 transition-colors disabled:opacity-50 mr-3"
+                className="p-2 text-slate-600 hover:text-blue-500 transition-colors disabled:opacity-50 mr-3 mt-0.5 shrink-0"
                 title="Upload CSV/Excel file"
               >
                 <Paperclip className={`w-5 h-5 ${uploadingFile ? 'animate-spin' : ''}`} />
@@ -691,13 +673,25 @@ export default function WorkflowDashboard() {
                 className="hidden"
                 onChange={handleFileUpload}
               />
-              <input
-                type="text" value={userInput} onChange={(e) => setUserInput(e.target.value)}
+              <textarea
+                value={userInput}
+                onChange={(e) => {
+                  setUserInput(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e as any);
+                  }
+                }}
                 placeholder={isTyping ? "Assistant is processing..." : "Initialize system query..."}
                 disabled={isTyping}
-                className="flex-grow bg-transparent border-none text-sm text-white font-mono focus:outline-none placeholder:text-slate-600"
+                rows={1}
+                className="flex-grow bg-transparent border-none text-sm text-white font-mono focus:outline-none placeholder:text-slate-600 resize-none overflow-hidden leading-relaxed"
               />
-              <button type="submit" disabled={!userInput.trim() || isTyping} className="text-blue-500 hover:text-blue-400 disabled:opacity-20 transition-all">
+              <button type="submit" disabled={!userInput.trim() || isTyping} className="text-blue-500 hover:text-blue-400 disabled:opacity-20 transition-all mt-0.5 shrink-0">
                 <Send className="w-6 h-6" />
               </button>
             </form>

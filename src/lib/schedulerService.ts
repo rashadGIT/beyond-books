@@ -14,10 +14,12 @@ interface SchedulerTask {
 
 class JobScheduler {
   private tasks: Map<string, SchedulerTask> = new Map();
+  // QB auto-sync tasks keyed by userId (separate from ScheduledJob tasks)
+  private qbSyncTasks: Map<string, ReturnType<typeof cron.schedule>> = new Map();
   private isInitialized = false;
 
   /**
-   * Initialize all active jobs for a user
+   * Initialize all active jobs for a user (ScheduledJobs + QB auto-sync)
    */
   async initializeUserJobs(userId: string) {
     const jobs = await prisma.scheduledJob.findMany({
@@ -32,7 +34,6 @@ class JobScheduler {
     for (const job of jobs) {
       if (job.cronExpression) {
         try {
-          // Only schedule if not already scheduled
           if (!this.tasks.has(job.id)) {
             this.scheduleJob(job.id, job.cronExpression, userId);
             scheduledCount++;
@@ -43,9 +44,59 @@ class JobScheduler {
       }
     }
 
+    // Wire QB auto-sync if enabled for this user
+    const qbConnection = await prisma.quickBooksConnection.findUnique({ where: { userId } });
+    if (qbConnection?.autoSyncEnabled && qbConnection.autoSyncCron) {
+      if (!this.qbSyncTasks.has(userId)) {
+        this.scheduleQbSyncJob(userId, qbConnection.autoSyncCron);
+        scheduledCount++;
+      }
+    }
+
     this.isInitialized = true;
     if (scheduledCount > 0) {
       console.log(`[Scheduler] Initialized ${scheduledCount} new jobs for user ${userId}`);
+    }
+  }
+
+  /**
+   * Schedule a QB auto-sync for a user (does not create a ScheduledJob record)
+   */
+  scheduleQbSyncJob(userId: string, cronExpression: string) {
+    this.unscheduleQbSyncJob(userId);
+
+    if (!cron.validate(cronExpression)) {
+      throw new Error(`Invalid cron expression for QB sync: ${cronExpression}`);
+    }
+
+    const task = cron.schedule(
+      cronExpression,
+      async () => {
+        try {
+          console.log(`[Scheduler] Running QB auto-sync for user ${userId}`);
+          const { runQbSyncForUser } = await import('./qbSyncService');
+          const result = await runQbSyncForUser(userId);
+          console.log(`[Scheduler] QB auto-sync complete for user ${userId}: ${result.transactionCount} transactions`);
+        } catch (error) {
+          console.error(`[Scheduler] QB auto-sync failed for user ${userId}:`, error);
+        }
+      },
+      { timezone: process.env.SCHEDULER_TIMEZONE || 'America/Chicago' }
+    );
+
+    this.qbSyncTasks.set(userId, task);
+    console.log(`[Scheduler] QB auto-sync scheduled for user ${userId} with cron: ${cronExpression}`);
+  }
+
+  /**
+   * Remove QB auto-sync schedule for a user
+   */
+  unscheduleQbSyncJob(userId: string) {
+    const existing = this.qbSyncTasks.get(userId);
+    if (existing) {
+      existing.stop();
+      this.qbSyncTasks.delete(userId);
+      console.log(`[Scheduler] QB auto-sync unscheduled for user ${userId}`);
     }
   }
 
@@ -121,6 +172,10 @@ class JobScheduler {
       task.task.stop();
     }
     this.tasks.clear();
+    for (const task of this.qbSyncTasks.values()) {
+      task.stop();
+    }
+    this.qbSyncTasks.clear();
     this.isInitialized = false;
     console.log('[Scheduler] Shutdown complete');
   }

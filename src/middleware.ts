@@ -22,13 +22,16 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get('access_token')?.value;
+  const isApiRoute = pathname.startsWith('/api/');
 
   if (!token) {
+    if (isApiRoute) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.redirect(new URL('/sign-in', request.url));
   }
 
   const user = await verifyTokenEdge(token);
   if (!user) {
+    if (isApiRoute) return NextResponse.json({ error: 'Session expired. Please log in again.' }, { status: 401 });
     const response = NextResponse.redirect(new URL('/sign-in', request.url));
     response.cookies.delete('access_token');
     response.cookies.delete('refresh_token');

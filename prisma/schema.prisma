@@ -11,16 +11,34 @@ datasource db {
 }
 
 model User {
-  id           String                @id // Cognito sub
-  email        String                @unique
-  name         String?
-  mcpToken     String?               // Random token for external MCP server access
-  createdAt    DateTime              @default(now())
-  qbConnection QuickBooksConnection?
-  chatMessages ChatMessage[]
-  files        ProcessedFile[]
-  jobs         ScheduledJob[]
-  aiSettings   AISettings[]
+  id              String                @id // Cognito sub
+  email           String                @unique
+  name            String?
+  mcpToken        String?               // Random token for external MCP server access
+  createdAt       DateTime              @default(now())
+  qbConnection    QuickBooksConnection?
+  chatMessages    ChatMessage[]
+  files           ProcessedFile[]
+  jobs            ScheduledJob[]
+  aiSettings      AISettings[]
+  orgBranding     OrgBranding?
+  programs        Program[]
+  allocationRules AllocationRule[]
+  emailProvider   EmailProvider?
+}
+
+model OrgBranding {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id])
+  orgName      String?
+  tagLine      String?
+  taxId        String?
+  signerName   String?
+  signerTitle  String?
+  logoUrl      String?
+  primaryColor String?
+  updatedAt    DateTime @updatedAt
 }
 
 model AISettings {
@@ -93,9 +111,13 @@ model DonationTransaction {
   fee           Float
   netAmount     Float
   description   String
-  originalData  String
-  createdAt     DateTime        @default(now())
-  letters       DonationLetter[]
+  originalData       String
+  qbSalesReceiptId   String?    // QB Sales Receipt ID — idempotency key for fee separation
+  classification     String     @default("UNCLASSIFIED")  // "RESTRICTED" | "GENERAL" | "UNCLASSIFIED"
+  restrictedFund     String?    // Fund name if classification = RESTRICTED
+  classificationConf Float?     // AI confidence score 0.0-1.0
+  createdAt          DateTime   @default(now())
+  letters            DonationLetter[]
 }
 
 model DonationLetter {
@@ -116,13 +138,30 @@ model DonationLetter {
 
 model EmailLog {
   id            String   @id @default(cuid())
+  userId        String?
   recipient     String
   recipientName String
   subject       String
-  status        String
+  status        String   // "sent" | "failed"
   letterId      String?
   errorMessage  String?
   sentAt        DateTime @default(now())
+}
+
+model EmailProvider {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider     String    // "resend" | "gmail" | "outlook"
+  fromEmail    String
+  fromName     String
+  // Resend
+  resendApiKey String?
+  // OAuth (Gmail / Outlook) — Phase B
+  accessToken  String?
+  refreshToken String?
+  tokenExpiry  DateTime?
+  updatedAt    DateTime  @updatedAt
 }
 
 model ChatMessage {
@@ -135,6 +174,36 @@ model ChatMessage {
   hasAttachment  Boolean  @default(false)
   attachmentType String?
   fileId         String?
+}
+
+model Program {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  name      String
+  type      String           // "PROGRAM" | "LOCATION" | "GRANT"
+  qbClassId String?
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  splits    AllocationSplit[]
+}
+
+model AllocationRule {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  name      String
+  createdAt DateTime         @default(now())
+  splits    AllocationSplit[]
+}
+
+model AllocationSplit {
+  id         String         @id @default(cuid())
+  ruleId     String
+  programId  String
+  percentage Float
+  rule       AllocationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  program    Program        @relation(fields: [programId], references: [id])
 }
 
 model QuickBooksConnection {
@@ -150,6 +219,8 @@ model QuickBooksConnection {
   companyName      String?
   lastSyncAt       DateTime?
   isActive         Boolean   @default(true)
+  autoSyncEnabled  Boolean   @default(false)
+  autoSyncCron     String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }

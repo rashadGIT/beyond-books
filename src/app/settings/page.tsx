@@ -3,9 +3,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Settings, Database, CheckCircle, XCircle, LogOut, ArrowLeft, Bot, Eye, EyeOff, RefreshCw, X, Check } from 'lucide-react';
+import { Settings, Database, CheckCircle, XCircle, LogOut, ArrowLeft, Bot, Eye, EyeOff, RefreshCw, X, Check, Clock, Mail } from 'lucide-react';
+import { AppNav } from '@/components/AppNav';
 
 type AIProvider = 'anthropic' | 'openai' | 'google';
+type SyncFrequency = 'HOURLY' | 'DAILY' | 'WEEKLY';
+
+const FREQUENCY_LABELS: Record<SyncFrequency, string> = {
+  HOURLY: 'Hourly',
+  DAILY: 'Daily',
+  WEEKLY: 'Weekly',
+};
 
 const PROVIDER_LABELS: Record<AIProvider, string> = {
   anthropic: 'Anthropic (Claude)',
@@ -32,6 +40,18 @@ export default function SettingsPage() {
   const [loadingQb, setLoadingQb] = useState(true);
   const [disconnecting, setDisconnecting] = useState(false);
 
+  // Branding state
+  const [branding, setBranding] = useState({ orgName: '', tagLine: '', taxId: '', signerName: '', signerTitle: '', primaryColor: '' });
+  const [savingBranding, setSavingBranding] = useState(false);
+  const [brandingMessage, setBrandingMessage] = useState('');
+
+  // Auto-sync state
+  const [autoSync, setAutoSync] = useState({ enabled: false, cron: '' as string | null });
+  const [syncSchedule, setSyncSchedule] = useState('09:00 AM');
+  const [syncFrequency, setSyncFrequency] = useState<SyncFrequency>('DAILY');
+  const [savingSync, setSavingSync] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+
   // Saved AI keys list
   const [savedKeys, setSavedKeys] = useState<SavedAIKey[]>([]);
   const [loadingAI, setLoadingAI] = useState(true);
@@ -50,9 +70,25 @@ export default function SettingsPage() {
   const [aiMessage, setAiMessage] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Email provider state
+  const [emailConfig, setEmailConfig] = useState<{ configured: boolean; provider?: string; fromEmail?: string; fromName?: string; hasApiKey?: boolean } | null>(null);
+  const [emailForm, setEmailForm] = useState({ fromName: '', fromEmail: '' });
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [emailMessage, setEmailMessage] = useState('');
+  const [disconnectingEmail, setDisconnectingEmail] = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('qb_connected') || params.get('qb_error')) {
+      window.history.replaceState({}, '', '/settings');
+    }
+    if (params.get('email_connected') === 'gmail') {
+      setEmailMessage('Gmail connected successfully!');
+      window.history.replaceState({}, '', '/settings');
+    }
+    if (params.get('email_error')) {
+      setEmailMessage('Gmail connection failed. Please try again.');
       window.history.replaceState({}, '', '/settings');
     }
 
@@ -61,7 +97,42 @@ export default function SettingsPage() {
       .then(data => { setQbStatus(data); setLoadingQb(false); })
       .catch(() => setLoadingQb(false));
 
+    fetch('/api/settings/branding')
+      .then(r => r.json())
+      .then(data => {
+        setBranding({
+          orgName: data.orgName ?? '',
+          tagLine: data.tagLine ?? '',
+          taxId: data.taxId ?? '',
+          signerName: data.signerName ?? '',
+          signerTitle: data.signerTitle ?? '',
+          primaryColor: data.primaryColor ?? '',
+        });
+      })
+      .catch(() => {});
+
+    fetch('/api/settings/sync-schedule')
+      .then(r => r.json())
+      .then(data => {
+        setAutoSync({ enabled: data.autoSyncEnabled ?? false, cron: data.autoSyncCron ?? null });
+      })
+      .catch(() => {});
+
     loadAIKeys();
+
+    fetch('/api/settings/email')
+      .then(r => r.json())
+      .then(data => {
+        setEmailConfig(data);
+        if (data.configured) {
+          setEmailForm(f => ({
+            ...f,
+            fromName: data.fromName ?? '',
+            fromEmail: data.fromEmail ?? '',
+          }));
+        }
+      })
+      .catch(() => {});
   }, []);
 
   async function loadAIKeys() {
@@ -166,6 +237,107 @@ export default function SettingsPage() {
     setDisconnecting(false);
   };
 
+  const handleSaveBranding = async () => {
+    setSavingBranding(true);
+    setBrandingMessage('');
+    try {
+      const res = await fetch('/api/settings/branding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(branding),
+      });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      setBrandingMessage('Saved!');
+    } catch (err: any) {
+      setBrandingMessage(err.message || 'Failed to save.');
+    }
+    setSavingBranding(false);
+  };
+
+  const handleSyncSave = async (enabled: boolean) => {
+    setSavingSync(true);
+    setSyncMessage('');
+    try {
+      const res = await fetch('/api/settings/sync-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled,
+          schedule: syncSchedule,
+          frequency: syncFrequency,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      setAutoSync({ enabled: data.autoSyncEnabled, cron: data.autoSyncCron });
+      setSyncMessage(enabled ? 'Auto-sync enabled!' : 'Auto-sync disabled.');
+    } catch (err: any) {
+      setSyncMessage(err.message || 'Failed to save.');
+    }
+    setSavingSync(false);
+  };
+
+  const handleSaveEmail = async () => {
+    setSavingEmail(true);
+    setEmailMessage('');
+    try {
+      const res = await fetch('/api/settings/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...emailForm, provider: 'ses' }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setEmailConfig({ configured: true, provider: 'ses', fromEmail: emailForm.fromEmail, fromName: emailForm.fromName });
+        setEmailMessage('Saved!');
+      } else {
+        setEmailMessage(data.error || `Error ${res.status}`);
+      }
+    } catch (err: any) {
+      setEmailMessage(err.message || 'Network error.');
+    }
+    setSavingEmail(false);
+  };
+
+  const handleTestEmail = async () => {
+    setTestingEmail(true);
+    setEmailMessage('');
+    try {
+      const action = 'test';
+      const body = { action };
+      const res = await fetch('/api/settings/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmailMessage(`Test email sent to ${emailForm.fromEmail || emailConfig?.fromEmail}!`);
+      } else {
+        setEmailMessage(data.error || 'Test failed.');
+      }
+    } catch (err: any) {
+      setEmailMessage(err.message || 'Network error.');
+    }
+    setTestingEmail(false);
+  };
+
+  const handleDisconnectEmail = async () => {
+    setDisconnectingEmail(true);
+    setEmailMessage('');
+    try {
+      await fetch('/api/settings/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'disconnect' }),
+      });
+      setEmailConfig({ configured: false });
+      setEmailForm({ fromName: '', fromEmail: '' });
+      setEmailMessage('Disconnected.');
+    } catch {}
+    setDisconnectingEmail(false);
+  };
+
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/sign-in');
@@ -180,22 +352,11 @@ export default function SettingsPage() {
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-slate-400 hover:text-white transition-colors">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-              <Settings className="w-5 h-5 text-blue-500" />
-              Settings
-            </h1>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-red-400 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign out
-          </button>
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <Settings className="w-5 h-5 text-blue-500" />
+            Settings
+          </h1>
+          <AppNav />
         </div>
 
         {/* QuickBooks Card */}
@@ -245,6 +406,129 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
+
+        {/* Letter Branding Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+          <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+            <Settings className="w-4 h-4" />
+            Letter Branding
+          </h2>
+          <p className="text-slate-500 text-xs">
+            These details appear on donation acknowledgment letters sent to donors.
+          </p>
+          <div className="space-y-3">
+            {[
+              { key: 'orgName', label: 'Organization Name', placeholder: 'Youth Revive Inc.' },
+              { key: 'tagLine', label: 'Tagline', placeholder: 'Building stronger communities together' },
+              { key: 'taxId', label: 'Tax ID (EIN)', placeholder: '84-1234567' },
+              { key: 'signerName', label: 'Signer Name', placeholder: 'Jane Smith' },
+              { key: 'signerTitle', label: 'Signer Title', placeholder: 'Executive Director' },
+              { key: 'primaryColor', label: 'Brand Color (hex)', placeholder: '#2563eb' },
+            ].map(({ key, label, placeholder }) => (
+              <div key={key}>
+                <label className="block text-xs text-slate-500 mb-1">{label}</label>
+                <input
+                  type="text"
+                  value={branding[key as keyof typeof branding]}
+                  onChange={e => setBranding(b => ({ ...b, [key]: e.target.value }))}
+                  placeholder={placeholder}
+                  className="w-full bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder:text-slate-600"
+                />
+              </div>
+            ))}
+          </div>
+          {brandingMessage && (
+            <p className={`text-xs ${brandingMessage === 'Saved!' ? 'text-emerald-400' : 'text-slate-400'}`}>
+              {brandingMessage}
+            </p>
+          )}
+          <button
+            onClick={handleSaveBranding}
+            disabled={savingBranding}
+            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white py-2 rounded-xl text-sm font-medium transition-all"
+          >
+            {savingBranding ? 'Saving...' : 'Save Branding'}
+          </button>
+        </div>
+
+        {/* Auto-Sync Card — only shown when QB is connected */}
+        {qbStatus.connected && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Auto-Sync
+              </h2>
+              {/* Toggle */}
+              <button
+                onClick={() => handleSyncSave(!autoSync.enabled)}
+                disabled={savingSync}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${
+                  autoSync.enabled ? 'bg-emerald-600' : 'bg-slate-700'
+                }`}
+                aria-label="Toggle auto-sync"
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    autoSync.enabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <p className="text-slate-500 text-xs">
+              Automatically pull new transactions from QuickBooks on a schedule.
+            </p>
+
+            {/* Schedule options — only editable when enabled or about to enable */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Time</label>
+                <input
+                  type="text"
+                  value={syncSchedule}
+                  onChange={e => setSyncSchedule(e.target.value)}
+                  placeholder="09:00 AM"
+                  className="w-full bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder:text-slate-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Frequency</label>
+                <select
+                  value={syncFrequency}
+                  onChange={e => setSyncFrequency(e.target.value as SyncFrequency)}
+                  className="w-full bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                >
+                  {(Object.keys(FREQUENCY_LABELS) as SyncFrequency[]).map(f => (
+                    <option key={f} value={f}>{FREQUENCY_LABELS[f]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {autoSync.enabled && (
+              <button
+                onClick={() => handleSyncSave(true)}
+                disabled={savingSync}
+                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white py-2 rounded-xl text-sm font-medium transition-all"
+              >
+                {savingSync ? 'Saving...' : 'Update Schedule'}
+              </button>
+            )}
+
+            {autoSync.cron && (
+              <p className="text-slate-500 text-xs">
+                Current: <span className="text-slate-300 font-mono">{autoSync.cron}</span>
+              </p>
+            )}
+
+            {syncMessage && (
+              <p className={`text-xs ${syncMessage.includes('!') ? 'text-emerald-400' : 'text-slate-400'}`}>
+                {syncMessage}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* AI Settings Card */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
@@ -440,6 +724,86 @@ export default function SettingsPage() {
 
             </div>
           )}
+        </div>
+
+        {/* Email Sending Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+          <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400 flex items-center gap-2">
+            <Mail className="w-4 h-4" />
+            Email Sending
+          </h2>
+          <p className="text-slate-500 text-xs">
+            Donation letters are sent on your behalf. Donor replies go directly to your Reply-To address.
+          </p>
+
+          {/* Connected state */}
+          {emailConfig?.configured && (
+            <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2.5">
+              <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-emerald-300 text-xs font-medium">Configured: {emailConfig.fromName}</p>
+                <p className="text-slate-500 text-xs">Replies go to {emailConfig.fromEmail}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Organization Name</label>
+              <input
+                type="text"
+                value={emailForm.fromName}
+                onChange={e => setEmailForm(f => ({ ...f, fromName: e.target.value }))}
+                placeholder="Youth Revive Inc."
+                className="w-full bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder:text-slate-600"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Reply-To Email</label>
+              <input
+                type="email"
+                value={emailForm.fromEmail}
+                onChange={e => setEmailForm(f => ({ ...f, fromEmail: e.target.value }))}
+                placeholder="you@yourorg.org"
+                className="w-full bg-slate-800 border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500 placeholder:text-slate-600"
+              />
+              <p className="text-slate-600 text-xs mt-1">Donor replies will be sent to this address</p>
+            </div>
+          </div>
+
+          {emailMessage && (
+            <p className={`text-xs ${emailMessage === 'Saved!' || emailMessage.startsWith('Test email sent') ? 'text-emerald-400' : 'text-slate-400'}`}>
+              {emailMessage}
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleSaveEmail}
+              disabled={savingEmail || !emailForm.fromName || !emailForm.fromEmail}
+              className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-2 rounded-xl text-sm font-medium transition-all"
+            >
+              {savingEmail ? 'Saving...' : emailConfig?.configured ? 'Update' : 'Save'}
+            </button>
+            {emailConfig?.configured && (
+              <button
+                onClick={handleTestEmail}
+                disabled={testingEmail}
+                className="flex-1 border border-slate-700 hover:border-slate-600 text-slate-300 hover:text-white py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-40"
+              >
+                {testingEmail ? 'Sending...' : 'Send Test'}
+              </button>
+            )}
+            {emailConfig?.configured && (
+              <button
+                onClick={handleDisconnectEmail}
+                disabled={disconnectingEmail}
+                className="border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-40 px-4 py-2 rounded-xl text-sm font-medium transition-all"
+              >
+                {disconnectingEmail ? '...' : 'Remove'}
+              </button>
+            )}
+          </div>
         </div>
 
       </div>

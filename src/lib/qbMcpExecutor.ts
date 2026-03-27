@@ -80,6 +80,94 @@ export async function createQbMcpClient(connection: QuickBooksConnection): Promi
     }
   );
 
+  server.tool(
+    'get_accounts',
+    'List the full Chart of Accounts with current balances, account types, and subtypes.',
+    {},
+    async () => ({ content: [{ type: 'text' as const, text: toText(await qbs.getAccountsForConnection(connection)) }] })
+  );
+
+  server.tool(
+    'get_general_ledger',
+    'General Ledger report — every transaction per account for a date range. Use for detailed account activity.',
+    {
+      startDate: z.string().describe('Start date in YYYY-MM-DD format'),
+      endDate: z.string().describe('End date in YYYY-MM-DD format'),
+    },
+    async (args) => {
+      const shiftYear = (date: string, delta: number) => {
+        const d = new Date(date);
+        d.setFullYear(d.getFullYear() + delta);
+        return d.toISOString().slice(0, 10);
+      };
+      const isEmpty = (r: any) => !r || (Array.isArray(r.sections) && r.sections.every((s: any) => !s.lines?.length));
+
+      let result = await qbs.getGeneralLedgerForConnection(connection, args.startDate, args.endDate);
+      let usedStart = args.startDate, usedEnd = args.endDate, yearNote = '';
+
+      if (isEmpty(result)) {
+        for (const delta of [-2, -3, -1]) {
+          const s = shiftYear(args.startDate, delta), e = shiftYear(args.endDate, delta);
+          result = await qbs.getGeneralLedgerForConnection(connection, s, e);
+          if (!isEmpty(result)) { usedStart = s; usedEnd = e; yearNote = ` (Note: no data found for ${args.startDate}–${args.endDate}; showing ${usedStart}–${usedEnd} instead)`; break; }
+        }
+      }
+
+      if (isEmpty(result)) {
+        return { content: [{ type: 'text' as const, text: `No general ledger data found across multiple date ranges. The QuickBooks account may be empty or not fully set up.` }] };
+      }
+      return { content: [{ type: 'text' as const, text: toText(result) + yearNote }] };
+    }
+  );
+
+  server.tool(
+    'get_trial_balance',
+    'Trial Balance report — net debit/credit per account for a period. Use for period-end review or to check if books balance.',
+    {
+      startDate: z.string().describe('Start date in YYYY-MM-DD format'),
+      endDate: z.string().describe('End date in YYYY-MM-DD format'),
+    },
+    async (args) => {
+      const shiftYear = (date: string, delta: number) => {
+        const d = new Date(date);
+        d.setFullYear(d.getFullYear() + delta);
+        return d.toISOString().slice(0, 10);
+      };
+      const isEmpty = (r: any) => !r || (Array.isArray(r.sections) && r.sections.every((s: any) => !s.lines?.length));
+
+      let result = await qbs.getTrialBalanceForConnection(connection, args.startDate, args.endDate);
+      let usedStart = args.startDate, usedEnd = args.endDate, yearNote = '';
+
+      if (isEmpty(result)) {
+        // Try -2 years, then -3 years (covers QB sandbox sample data ~2019-2023)
+        for (const delta of [-2, -3, -1]) {
+          const s = shiftYear(args.startDate, delta), e = shiftYear(args.endDate, delta);
+          result = await qbs.getTrialBalanceForConnection(connection, s, e);
+          if (!isEmpty(result)) { usedStart = s; usedEnd = e; yearNote = ` (Note: no data found for ${args.startDate}–${args.endDate}; showing ${usedStart}–${usedEnd} instead)`; break; }
+        }
+      }
+
+      if (isEmpty(result)) {
+        return { content: [{ type: 'text' as const, text: `No trial balance data found across multiple date ranges. The QuickBooks account may be empty or not fully set up.` }] };
+      }
+      return { content: [{ type: 'text' as const, text: toText(result) + yearNote }] };
+    }
+  );
+
+  server.tool(
+    'get_ar_subledger',
+    'Open (unpaid) invoices grouped by customer with total balance owed. Use for collections or aging analysis.',
+    {},
+    async () => ({ content: [{ type: 'text' as const, text: toText(await qbs.getArSubledgerForConnection(connection)) }] })
+  );
+
+  server.tool(
+    'get_ap_subledger',
+    'Open (unpaid) bills grouped by vendor with total amount owed. Use for cash flow or vendor payables.',
+    {},
+    async () => ({ content: [{ type: 'text' as const, text: toText(await qbs.getApSubledgerForConnection(connection)) }] })
+  );
+
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'chat-client', version: '1.0.0' }, { capabilities: {} });
 

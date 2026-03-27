@@ -21,10 +21,10 @@ export class PDFService {
     branding?: BrandingConfig
   ): string {
     const defaultBranding = {
-      organizationName: 'Youth Revive Inc.',
+      organizationName: 'Your Organization',
       tagline: 'Building stronger communities together',
-      taxId: '840-464680632',
-      signerName: 'Brandie',
+      taxId: 'XX-XXXXXXX',
+      signerName: 'Your Name',
       signerTitle: 'Executive Director',
       primaryColor: '#2563eb',
     };
@@ -270,67 +270,51 @@ export class PDFService {
   }
 
   // Generate a general-purpose report PDF from a title + plain text/markdown content
+  // Uses pdfkit (pure JS — no Chromium or S3 required). Saves to public/reports/ and returns a relative URL.
   static async generateReportPDF(title: string, content: string): Promise<string> {
-    // Convert basic markdown to HTML
-    const bodyHtml = content
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/^#{1,3}\s+(.+)$/gm, '<h3>$1</h3>')
-      .replace(/\n{2,}/g, '</p><p>')
-      .replace(/\n/g, '<br>');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const PDFDocument = require('pdfkit') as typeof import('pdfkit');
+    const fs = await import('fs');
+    const path = await import('path');
 
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    body { font-family: Arial, sans-serif; padding: 48px; line-height: 1.7; color: #1e293b; }
-    h1 { color: #2563eb; font-size: 26px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-bottom: 6px; }
-    h3 { color: #334155; margin-top: 20px; }
-    .meta { color: #64748b; font-size: 12px; margin-bottom: 32px; }
-    p { margin: 0 0 12px; }
-    strong { color: #0f172a; }
-  </style>
-</head>
-<body>
-  <h1>${title}</h1>
-  <div class="meta">Generated ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
-  <p>${bodyHtml}</p>
-</body>
-</html>`;
-
-    const browser = await puppeteer.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(
-        process.env.CHROMIUM_PATH ?? undefined
-      ),
-      headless: true,
-    });
-
-    let pdfBuffer: Buffer;
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      pdfBuffer = Buffer.from(await page.pdf({
-        format: 'Letter',
-        printBackground: true,
-        margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
-      }));
-    } finally {
-      await browser.close();
-    }
+    const reportsDir = path.join(process.cwd(), 'public', 'reports');
+    if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
 
     const slug = title.replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 40);
-    const s3Key = `pdfs/report-${slug}-${Date.now()}.pdf`;
-    await s3.send(new PutObjectCommand({
-      Bucket: process.env.BB_S3_BUCKET,
-      Key: s3Key,
-      Body: pdfBuffer,
-      ContentType: 'application/pdf',
-    }));
+    const filename = `report-${slug}-${Date.now()}.pdf`;
+    const filepath = path.join(reportsDir, filename);
 
-    return s3Key;
+    await new Promise<void>((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
+      const stream = fs.createWriteStream(filepath);
+      doc.pipe(stream);
+
+      // Title
+      doc.fontSize(22).fillColor('#2563eb').text(title, { align: 'left' });
+      doc.moveDown(0.3);
+      doc.moveTo(50, doc.y).lineTo(562, doc.y).strokeColor('#2563eb').stroke();
+      doc.moveDown(0.5);
+
+      // Date
+      doc.fontSize(10).fillColor('#64748b')
+        .text(`Generated ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`);
+      doc.moveDown(1);
+
+      // Body — strip markdown, render plain text
+      const plain = content
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/^#{1,3}\s+/gm, '')
+        .replace(/\|.*\|/g, (line) => line.replace(/\|/g, '  ').trim());
+
+      doc.fontSize(11).fillColor('#1e293b').text(plain, { lineGap: 4 });
+
+      doc.end();
+      stream.on('finish', resolve);
+      stream.on('error', reject);
+    });
+
+    return `/reports/${filename}`;
   }
 
   // Generate letter and save to database
@@ -338,7 +322,8 @@ export class PDFService {
     donorName: string,
     donorEmail: string,
     transactionIds: string[],
-    isSummary: boolean = true
+    isSummary: boolean = true,
+    userId?: string
   ): Promise<any> {
     // Get transactions
     const transactions = await prisma.donationTransaction.findMany({
@@ -349,6 +334,23 @@ export class PDFService {
 
     if (transactions.length === 0) {
       throw new Error('No transactions found');
+    }
+
+    // Load org branding from DB if userId provided
+    let branding: BrandingConfig | undefined;
+    if (userId) {
+      const orgBranding = await prisma.orgBranding.findUnique({ where: { userId } });
+      if (orgBranding) {
+        branding = {
+          organizationName: orgBranding.orgName ?? 'Your Organization',
+          tagline: orgBranding.tagLine ?? 'Building stronger communities together',
+          taxId: orgBranding.taxId ?? 'XX-XXXXXXX',
+          signerName: orgBranding.signerName ?? 'Your Name',
+          signerTitle: orgBranding.signerTitle ?? 'Executive Director',
+          logoUrl: orgBranding.logoUrl ?? undefined,
+          primaryColor: orgBranding.primaryColor ?? '#2563eb',
+        };
+      }
     }
 
     const totalAmount = transactions.reduce((sum, tx) => sum + tx.grossAmount, 0);
@@ -363,7 +365,8 @@ export class PDFService {
       totalAmount,
       dateRange,
       isSummary,
-      transactions
+      transactions,
+      branding
     );
 
     // Save to database
