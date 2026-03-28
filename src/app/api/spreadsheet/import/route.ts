@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       ? await prisma.processedFile.findFirst({ where: { id: fileId, userId } })
       : await prisma.processedFile.findFirst({
           where: { userId, source: 'QB_IMPORT' },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { uploadedAt: 'desc' },
         });
 
     if (!processedFile) {
@@ -44,6 +44,10 @@ export async function POST(request: NextRequest) {
         { error: 'No import file found. Please upload a spreadsheet first.' },
         { status: 400 }
       );
+    }
+
+    if (!processedFile.filePath) {
+      return NextResponse.json({ error: 'File path not found' }, { status: 400 });
     }
 
     // Download from S3 and parse
