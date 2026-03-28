@@ -24,6 +24,8 @@ const nextConfig: NextConfig = {
     AI_API_KEY: process.env.AI_API_KEY ?? '',
     AI_MODEL: process.env.AI_MODEL ?? '',
     SES_FROM_EMAIL: process.env.SES_FROM_EMAIL ?? '',
+    BB_SES_KEY_ID: process.env.BB_SES_KEY_ID ?? '',
+    BB_SES_SECRET: process.env.BB_SES_SECRET ?? '',
   },
 };
 
