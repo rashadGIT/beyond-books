@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getQuickBooksService } from '@/lib/quickbooksService';
 import { ExcelService } from '@/lib/excelService';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-
-const s3 = new S3Client({ region: 'us-east-1' });
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client as s3 } from '@/lib/awsClients';
 
 const VALID_TYPES = ['invoices', 'customers', 'vendors', 'products', 'chart_of_accounts'];
 

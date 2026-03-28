@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { processCSV, processExcel } from '@/lib/parser';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { s3Client as s3 } from '@/lib/awsClients';
 import path from 'path';
 import { StandardizedTransaction } from '@/lib/types';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
-const s3 = new S3Client({ region: 'us-east-1' });
 
 export async function POST(request: NextRequest) {
   try {

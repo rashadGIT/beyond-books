@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ExcelService } from '@/lib/excelService';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { PDFService } from '@/lib/pdfService';
-
-const s3 = new S3Client({ region: 'us-east-1' });
+import { s3Client as s3 } from '@/lib/awsClients';
 
 const VALID_TYPES = ['invoices', 'customers', 'vendors', 'products', 'chart_of_accounts'];
 

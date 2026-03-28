@@ -1,7 +1,6 @@
 import { Resend } from 'resend';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
-
-const sesClient = new SESClient({ region: process.env.AWS_REGION ?? 'us-east-1' });
+import { SendEmailCommand } from '@aws-sdk/client-ses';
+import { sesClient } from './awsClients';
 
 export interface SendLetterParams {
   to: string;

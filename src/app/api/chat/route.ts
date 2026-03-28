@@ -749,11 +749,10 @@ export async function POST(request: NextRequest) {
               continue;
             }
 
-            const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+            const { GetObjectCommand } = await import('@aws-sdk/client-s3');
+            const { s3Client: s3 } = await import('@/lib/awsClients');
             const { ExcelService } = await import('@/lib/excelService');
             const { detectParser } = await import('@/lib/platformImporters');
-
-            const s3 = new S3Client({ region: 'us-east-1' });
             const s3Res = await s3.send(new GetObjectCommand({ Bucket: process.env.BB_S3_BUCKET, Key: processedFile.filePath }));
             const chunks: Uint8Array[] = [];
             for await (const chunk of s3Res.Body as AsyncIterable<Uint8Array>) chunks.push(chunk);

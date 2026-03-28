@@ -1,12 +1,11 @@
 import chromium from '@sparticuz/chromium-min';
 import puppeteer from 'puppeteer-core';
 import { prisma } from './prisma';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { BrandingConfig } from './types';
-
-const s3 = new S3Client({ region: 'us-east-1' });
+import { s3Client as s3 } from './awsClients';
 
 export class PDFService {
 
