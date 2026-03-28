@@ -12,6 +12,9 @@ export async function GET() {
         BB_SES_SECRET: process.env.BB_SES_SECRET ? 'SET' : 'NOT SET',
         SES_FROM_EMAIL: process.env.SES_FROM_EMAIL ?? 'NOT SET',
         AWS_REGION: process.env.AWS_REGION ?? 'NOT SET',
+        AI_PROVIDER: process.env.AI_PROVIDER ?? 'NOT SET',
+        AI_API_KEY: process.env.AI_API_KEY ? `${process.env.AI_API_KEY.slice(0, 8)}...` : 'NOT SET',
+        AI_MODEL: process.env.AI_MODEL ?? 'NOT SET',
       },
     });
   } catch (e: any) {
