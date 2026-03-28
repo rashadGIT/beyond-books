@@ -2,8 +2,8 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { SESClient } from '@aws-sdk/client-ses';
 
 function getCredentials() {
-  const keyId = process.env.BB_AWS_KEY_ID;
-  const secretKey = process.env.BB_AWS_SECRET_KEY;
+  const keyId = process.env.BB_SES_KEY_ID;
+  const secretKey = process.env.BB_SES_SECRET;
   return keyId && secretKey
     ? { credentials: { accessKeyId: keyId, secretAccessKey: secretKey } }
     : {};
