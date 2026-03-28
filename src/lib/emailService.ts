@@ -1,6 +1,6 @@
 import { Resend } from 'resend';
 import { SendEmailCommand } from '@aws-sdk/client-ses';
-import { sesClient } from './awsClients';
+import { getSESClient } from './awsClients';
 
 export interface SendLetterParams {
   to: string;
@@ -114,7 +114,7 @@ export async function sendViaSES(
   if (!toAddress) return { success: false, error: 'Donor email address is missing.' };
   if (!replyToAddress) return { success: false, error: 'Reply-To email not configured. Please update Email settings.' };
   try {
-    await sesClient.send(new SendEmailCommand({
+    await getSESClient().send(new SendEmailCommand({
       Source: `${fromName || 'Beyond Books'} <${fromEmail}>`,
       Destination: { ToAddresses: [toAddress] },
       ReplyToAddresses: [replyToAddress],

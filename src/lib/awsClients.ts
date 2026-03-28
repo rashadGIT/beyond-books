@@ -1,9 +1,22 @@
 import { S3Client } from '@aws-sdk/client-s3';
 import { SESClient } from '@aws-sdk/client-ses';
 
-const credentials = process.env.BB_AWS_KEY_ID && process.env.BB_AWS_SECRET_KEY
-  ? { credentials: { accessKeyId: process.env.BB_AWS_KEY_ID, secretAccessKey: process.env.BB_AWS_SECRET_KEY } }
-  : {};
+function getCredentials() {
+  const keyId = process.env.BB_AWS_KEY_ID;
+  const secretKey = process.env.BB_AWS_SECRET_KEY;
+  return keyId && secretKey
+    ? { credentials: { accessKeyId: keyId, secretAccessKey: secretKey } }
+    : {};
+}
 
-export const s3Client = new S3Client({ region: process.env.AWS_REGION ?? 'us-east-1', ...credentials });
-export const sesClient = new SESClient({ region: process.env.AWS_REGION ?? 'us-east-1', ...credentials });
+export function getS3Client() {
+  return new S3Client({ region: process.env.AWS_REGION ?? 'us-east-1', ...getCredentials() });
+}
+
+export function getSESClient() {
+  return new SESClient({ region: process.env.AWS_REGION ?? 'us-east-1', ...getCredentials() });
+}
+
+// Singleton exports for backwards compat — created at first import (runtime)
+export const s3Client = getS3Client();
+export const sesClient = getSESClient();
