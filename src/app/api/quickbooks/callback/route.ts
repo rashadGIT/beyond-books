@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { getQuickBooksService } from '@/lib/quickbooksService';
 import { prisma } from '@/lib/prisma';
+
+export const QbCallbackSchema = z.object({
+  code: z.string().min(1),
+  realmId: z.string().min(1),
+  state: z.string().optional(),
+});
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const code = searchParams.get('code');
-    const realmId = searchParams.get('realmId');
-    const state = searchParams.get('state');
     const error = searchParams.get('error');
 
     if (error) {
@@ -16,11 +20,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!code || !realmId || !state) {
+    const qp = QbCallbackSchema.safeParse(Object.fromEntries(searchParams));
+    if (!qp.success) {
       return NextResponse.redirect(
         `${process.env.NEXT_PUBLIC_URL}/settings?qb_error=missing_parameters`
       );
     }
+
+    const { code, realmId, state } = qp.data;
 
     // Decode userId from state
     let userId: string;

@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getQuickBooksService } from '@/lib/quickbooksService';
+
+export const DateRangeSchema = z.object({
+  start: z.string().optional(),
+  end: z.string().optional(),
+});
 
 export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(request.url);
-  const start = searchParams.get('start') ?? undefined;
-  const end = searchParams.get('end') ?? undefined;
+  const qp = DateRangeSchema.safeParse(Object.fromEntries(searchParams));
+  if (!qp.success) {
+    return NextResponse.json({ error: 'Validation failed', details: qp.error.flatten() }, { status: 400 });
+  }
+  const { start, end } = qp.data;
 
   const connection = await prisma.quickBooksConnection.findUnique({ where: { userId } });
   if (!connection?.isActive) {

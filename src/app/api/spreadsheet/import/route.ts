@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getQuickBooksService } from '@/lib/quickbooksService';
 import { ExcelService } from '@/lib/excelService';
@@ -6,6 +7,11 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client as s3 } from '@/lib/awsClients';
 
 const VALID_TYPES = ['invoices', 'customers', 'vendors', 'products', 'chart_of_accounts'];
+
+export const ImportSchema = z.object({
+  fileId: z.string().min(1),
+  entityType: z.string().min(1),
+});
 
 async function downloadFromS3(s3Key: string): Promise<Buffer> {
   const res = await s3.send(new GetObjectCommand({
@@ -23,9 +29,13 @@ export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  try {
-    const { entityType, fileId } = await request.json();
+  const parsed = ImportSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { entityType, fileId } = parsed.data;
 
+  try {
     if (!VALID_TYPES.includes(entityType)) {
       return NextResponse.json({ error: 'Invalid entityType' }, { status: 400 });
     }

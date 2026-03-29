@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { JobService } from '@/lib/jobService';
 import { scheduler } from '@/lib/schedulerService';
+
+export const CreateJobSchema = z.object({
+  prompt: z.string().min(1),
+  label: z.string().min(1),
+  schedule: z.string().min(1),
+  frequency: z.enum(['HOURLY', 'DAILY', 'WEEKLY']).optional(),
+});
+
+export const RunJobSchema = z.object({
+  jobId: z.string().min(1),
+});
 
 export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
@@ -26,17 +38,24 @@ export async function POST(request: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const body = await request.json();
+    const rawBody = await request.json();
 
     // Create new job (has prompt, label, schedule)
-    if (body.prompt && body.label && body.schedule) {
-      const job = await JobService.createJob(userId, body);
+    if (rawBody.prompt && rawBody.label && rawBody.schedule) {
+      const parsed = CreateJobSchema.safeParse(rawBody);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+      }
+      const job = await JobService.createJob(userId, parsed.data);
       return NextResponse.json(job);
     }
     // OR manually run existing job
     else {
-      const { jobId } = body;
-      const execution = await JobService.runJob(jobId);
+      const parsed = RunJobSchema.safeParse(rawBody);
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+      }
+      const execution = await JobService.runJob(parsed.data.jobId);
       return NextResponse.json(execution);
     }
   } catch (error: any) {

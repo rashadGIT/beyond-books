@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { PDFService } from '@/lib/pdfService';
 import { ChatFileService } from '@/lib/chatFileService';
 import { sendDonationLetter } from '@/lib/emailService';
+
+export const CreateLetterSchema = z.object({
+  action: z.string().min(1),
+  donorName: z.string().optional(),
+});
 
 async function getOrgName(userId: string): Promise<string> {
   const branding = await prisma.orgBranding.findUnique({ where: { userId } });
@@ -13,10 +19,13 @@ export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  try {
-    const body = await request.json();
-    const { action, donorName } = body;
+  const parsed = CreateLetterSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { action, donorName } = parsed.data;
 
+  try {
     if (action === 'send_single') {
       const donorGroups = await ChatFileService.groupTransactionsByDonor();
       const donor = donorGroups.find(

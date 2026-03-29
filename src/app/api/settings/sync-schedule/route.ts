@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { scheduler } from '@/lib/schedulerService';
 import { parseScheduleToCron } from '@/lib/cronUtils';
+
+export const SyncScheduleSchema = z.object({
+  enabled: z.boolean(),
+  schedule: z.string().optional(),
+  frequency: z.enum(['DAILY', 'WEEKLY', 'HOURLY']).optional(),
+});
 
 /**
  * GET  — return current auto-sync settings for the connected QB account
@@ -27,12 +34,11 @@ export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await request.json();
-  const { enabled, schedule, frequency } = body as {
-    enabled: boolean;
-    schedule?: string;  // e.g. "09:00 AM"
-    frequency?: string; // "HOURLY" | "DAILY" | "WEEKLY"
-  };
+  const parsed = SyncScheduleSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { enabled, schedule, frequency } = parsed.data;
 
   const connection = await prisma.quickBooksConnection.findUnique({ where: { userId } });
   if (!connection) {

@@ -1,15 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { getQuickBooksService } from '@/lib/quickbooksService';
 import { ExcelService } from '@/lib/excelService';
+
+export const ExportSchema = z.object({
+  dataType: z.string().min(1),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  format: z.enum(['xlsx', 'csv']).default('xlsx'),
+});
 
 export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  try {
-    const { dataType, startDate, endDate, format = 'xlsx' } = await request.json();
+  const parsed = ExportSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { dataType, startDate, endDate, format } = parsed.data;
 
+  try {
     if (!['invoices', 'payments', 'sales_receipts'].includes(dataType)) {
       return NextResponse.json({ error: 'Invalid dataType' }, { status: 400 });
     }

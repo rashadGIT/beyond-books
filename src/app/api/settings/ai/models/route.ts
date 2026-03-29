@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
+export const FetchModelsSchema = z.object({
+  provider: z.enum(['anthropic', 'openai', 'google']),
+  apiKey: z.string().min(1),
+});
 
 async function fetchAnthropicModels(apiKey: string): Promise<string[]> {
   const res = await fetch('https://api.anthropic.com/v1/models', {
@@ -60,10 +66,11 @@ export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { provider, apiKey } = await request.json();
-  if (!provider || !apiKey) {
-    return NextResponse.json({ error: 'provider and apiKey are required' }, { status: 400 });
+  const parsed = FetchModelsSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
   }
+  const { provider, apiKey } = parsed.data;
 
   try {
     let models: string[];

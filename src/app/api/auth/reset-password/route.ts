@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { confirmForgotPassword } from '@/lib/cognito';
 
-export async function POST(request: NextRequest) {
-  try {
-    const { email, code, newPassword } = await request.json();
-    if (!email || !code || !newPassword) {
-      return NextResponse.json({ error: 'Email, code, and new password are required.' }, { status: 400 });
-    }
+export const ResetPasswordSchema = z.object({
+  email: z.string().email(),
+  code: z.string().min(1),
+  newPassword: z.string().min(8),
+});
 
+export async function POST(request: NextRequest) {
+  const parsed = ResetPasswordSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { email, code, newPassword } = parsed.data;
+
+  try {
     await confirmForgotPassword(email, code, newPassword);
     return NextResponse.json({ success: true, message: 'Password reset successfully. You can now sign in.' });
   } catch (err: unknown) {

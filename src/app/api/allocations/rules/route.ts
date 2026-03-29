@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+
+export const AllocationRuleSchema = z.object({
+  name: z.string().min(1),
+  splits: z.array(z.object({
+    programId: z.string().min(1),
+    percentage: z.number(),
+  })).min(1),
+});
 
 export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
@@ -22,13 +31,11 @@ export async function POST(request: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { name, splits } = await request.json() as {
-      name: string;
-      splits: { programId: string; percentage: number }[];
-    };
-
-    if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
-    if (!splits?.length) return NextResponse.json({ error: 'splits required' }, { status: 400 });
+    const parsed = AllocationRuleSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    }
+    const { name, splits } = parsed.data;
 
     const total = splits.reduce((s, sp) => s + sp.percentage, 0);
     if (Math.abs(total - 100) > 0.01) {

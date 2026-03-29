@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { confirmSignUp } from '@/lib/cognito';
 
+export const ConfirmSchema = z.object({
+  email: z.string().email(),
+  code: z.string().min(1),
+});
+
 export async function POST(request: NextRequest) {
+  const parsed = ConfirmSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { email, code } = parsed.data;
+
   try {
-    const { email, code } = await request.json();
-
-    if (!email || !code) {
-      return NextResponse.json({ error: 'Email and confirmation code are required' }, { status: 400 });
-    }
-
     await confirmSignUp(email, code);
 
     return NextResponse.json({ success: true, message: 'Email verified! You can now sign in.' });

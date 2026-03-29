@@ -6,6 +6,7 @@ frontend:
         - npm ci
         - npx prisma generate
         - npx prisma migrate deploy
+        - npm test
     build:
       commands:
         - npm run build

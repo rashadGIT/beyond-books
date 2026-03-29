@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { ExcelService } from '@/lib/excelService';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { PDFService } from '@/lib/pdfService';
@@ -6,13 +7,20 @@ import { s3Client as s3 } from '@/lib/awsClients';
 
 const VALID_TYPES = ['invoices', 'customers', 'vendors', 'products', 'chart_of_accounts'];
 
+export const TemplateQuerySchema = z.object({
+  type: z.string().min(1),
+  format: z.string().optional(),
+});
+
 export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { searchParams } = request.nextUrl;
-  const type = searchParams.get('type') ?? '';
-  const format = searchParams.get('format') ?? 'xlsx';
+  const parsed = TemplateQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { type, format = 'xlsx' } = parsed.data;
 
   if (!VALID_TYPES.includes(type)) {
     return NextResponse.json({ error: 'Invalid type' }, { status: 400 });

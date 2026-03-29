@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+
+export const AISettingsSchema = z.object({
+  provider: z.enum(['anthropic', 'openai', 'google']),
+  apiKey: z.string().min(1),
+  model: z.string().min(1),
+  setActive: z.boolean().optional(),
+});
+
+export const AIProviderSchema = z.object({
+  provider: z.enum(['anthropic', 'openai', 'google']),
+});
 
 function maskKey(key: string): string {
   if (key.length <= 8) return '****';
@@ -44,10 +56,11 @@ export async function PUT(request: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { provider, apiKey, model, setActive = true } = await request.json();
-    if (!provider || !apiKey || !model) {
-      return NextResponse.json({ error: 'provider, apiKey, and model are required' }, { status: 400 });
+    const parsed = AISettingsSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
     }
+    const { provider, apiKey, model, setActive = true } = parsed.data;
 
     await ensureUser(userId, request);
 
@@ -82,8 +95,11 @@ export async function PATCH(request: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { provider } = await request.json();
-    if (!provider) return NextResponse.json({ error: 'provider is required' }, { status: 400 });
+    const parsed = AIProviderSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    }
+    const { provider } = parsed.data;
 
     await prisma.aISettings.updateMany({ where: { userId }, data: { isActive: false } });
     await prisma.aISettings.update({
@@ -103,8 +119,11 @@ export async function DELETE(request: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { provider } = await request.json();
-    if (!provider) return NextResponse.json({ error: 'provider is required' }, { status: 400 });
+    const parsed = AIProviderSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    }
+    const { provider } = parsed.data;
 
     const deleted = await prisma.aISettings.delete({
       where: { userId_provider: { userId, provider } },

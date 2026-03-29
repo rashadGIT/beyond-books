@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  type-check:
+    name: TypeScript type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    name: Jest unit + contract tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bbadmin
+          POSTGRES_PASSWORD: localdev
+          POSTGRES_DB: beyondbooks_test
+        ports:
+          - '5433:5432'
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://bbadmin:localdev@localhost:5433/beyondbooks_test
+      COGNITO_USER_POOL_ID: us-east-1_TESTPOOL
+      COGNITO_CLIENT_ID: test-client-id
+      COGNITO_DOMAIN: https://test.auth.us-east-1.amazoncognito.com
+      AWS_REGION: us-east-1
+      BB_SES_KEY_ID: AKIATEST
+      BB_SES_SECRET: testsecret
+      SES_FROM_EMAIL: test@test.com
+      BB_S3_BUCKET: test-bucket
+      AI_PROVIDER: openai
+      AI_API_KEY: sk-test-key-for-jest
+      AI_MODEL: gpt-4o
+      QUICKBOOKS_CLIENT_ID: test_qb_client
+      QUICKBOOKS_CLIENT_SECRET: test_qb_secret
+      QUICKBOOKS_REDIRECT_URI: http://localhost:3000/api/quickbooks/callback
+      QUICKBOOKS_ENVIRONMENT: sandbox
+      CRON_SECRET: test-cron-secret
+      DISABLE_SCHEDULER: 'true'
+      GOOGLE_CLIENT_ID: test-google-client-id
+      GOOGLE_CLIENT_SECRET: test-google-client-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm test
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+
+  build:
+    name: Next.js build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Build
+        run: npm run build
+        env:
+          DATABASE_URL: postgresql://bbadmin:localdev@localhost:5432/beyondbooks_build
+          COGNITO_USER_POOL_ID: us-east-1_TESTPOOL
+          COGNITO_CLIENT_ID: test-client-id
+          COGNITO_DOMAIN: https://test.auth.us-east-1.amazoncognito.com
+          AWS_REGION: us-east-1
+          BB_SES_KEY_ID: AKIATEST
+          BB_SES_SECRET: testsecret
+          SES_FROM_EMAIL: test@test.com
+          BB_S3_BUCKET: test-bucket
+          AI_PROVIDER: openai
+          AI_API_KEY: sk-test-key-for-jest
+          AI_MODEL: gpt-4o
+          QUICKBOOKS_CLIENT_ID: test_qb_client
+          QUICKBOOKS_CLIENT_SECRET: test_qb_secret
+          QUICKBOOKS_REDIRECT_URI: http://localhost:3000/api/quickbooks/callback
+          QUICKBOOKS_ENVIRONMENT: sandbox
+          CRON_SECRET: test-cron-secret
+          GOOGLE_CLIENT_ID: test-google-client-id
+          GOOGLE_CLIENT_SECRET: test-google-client-secret

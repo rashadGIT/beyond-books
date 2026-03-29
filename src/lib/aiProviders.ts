@@ -28,7 +28,7 @@ function getProviderConfig(): { provider: AIProvider; apiKey: string; model: str
   const apiKey = process.env.AI_API_KEY;
   const model = process.env.AI_MODEL;
 
-  if (!apiKey) throw new Error(`AI_API_KEY is not set (provider=${provider}, key=${JSON.stringify(apiKey)}, keyLen=${apiKey?.length ?? 0})`);
+  if (!apiKey) throw new Error('No AI key configured. Go to Settings → AI Configuration and add your API key.');
 
   return { provider, apiKey, model };
 }

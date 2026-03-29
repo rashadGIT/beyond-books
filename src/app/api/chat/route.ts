@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { generateAIResponse, AIMessage, AIOverride } from '@/lib/aiProviders';
 import type { AITool } from '@/lib/aiProviders';
@@ -6,6 +7,12 @@ import { createQbMcpClient } from '@/lib/qbMcpExecutor';
 import { JobService } from '@/lib/jobService';
 import { PDFService } from '@/lib/pdfService';
 import { ExcelService } from '@/lib/excelService';
+
+export const ChatSchema = z.object({
+  role: z.string().min(1),
+  content: z.string(),
+  fileId: z.string().optional(),
+});
 
 function buildSystemPrompt() {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -315,16 +322,13 @@ export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  try {
-    const body = await request.json();
-    const { role, content, fileId } = body ?? {};
+  const parsed = ChatSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { role, content, fileId } = parsed.data;
 
-    if (!role || typeof role !== 'string') {
-      return NextResponse.json({ error: `Invalid request: missing role (got ${JSON.stringify(role)})` }, { status: 400 });
-    }
-    if (content === undefined || content === null) {
-      return NextResponse.json({ error: 'Invalid request: missing content' }, { status: 400 });
-    }
+  try {
 
     // Ensure user record exists
     await prisma.user.upsert({

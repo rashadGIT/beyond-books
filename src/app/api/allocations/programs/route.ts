@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+
+export const ProgramSchema = z.object({
+  name: z.string().min(1),
+  type: z.string().min(1),
+  description: z.string().optional(),
+});
 
 export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
@@ -21,8 +28,11 @@ export async function POST(request: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { name, type } = await request.json();
-    if (!name || !type) return NextResponse.json({ error: 'name and type required' }, { status: 400 });
+    const parsed = ProgramSchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+    }
+    const { name, type } = parsed.data;
     const validTypes = ['PROGRAM', 'LOCATION', 'GRANT'];
     if (!validTypes.includes(type)) return NextResponse.json({ error: `type must be one of ${validTypes.join(', ')}` }, { status: 400 });
 

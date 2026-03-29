@@ -1,15 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+
+export const GmailCallbackSchema = z.object({
+  code: z.string().min(1),
+  state: z.string().optional(),
+});
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const code = searchParams.get('code');
-  const state = searchParams.get('state');
   const error = searchParams.get('error');
 
   const baseUrl = process.env.NEXT_PUBLIC_URL ?? 'http://localhost:3000';
 
-  if (error || !code || !state) {
+  if (error) {
+    return NextResponse.redirect(`${baseUrl}/settings?email_error=gmail_denied`);
+  }
+
+  const parsed = GmailCallbackSchema.safeParse(Object.fromEntries(searchParams));
+  if (!parsed.success) {
+    return NextResponse.redirect(`${baseUrl}/settings?email_error=gmail_denied`);
+  }
+
+  const { code, state } = parsed.data;
+
+  if (!state) {
     return NextResponse.redirect(`${baseUrl}/settings?email_error=gmail_denied`);
   }
 

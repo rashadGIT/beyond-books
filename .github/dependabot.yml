@@ -1,0 +1,37 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      types:
+        patterns:
+          - '@types/*'
+      dev-tooling:
+        patterns:
+          - 'eslint*'
+          - 'jest*'
+          - 'ts-jest'
+          - '@jest/*'
+          - '@testing-library/*'
+          - '@playwright/test'
+          - 'typescript'
+          - 'tailwindcss'
+          - 'prettier'
+    ignore:
+      # Ignore major version bumps for core frameworks
+      - dependency-name: next
+        update-types: ['version-update:semver-major']
+      - dependency-name: react
+        update-types: ['version-update:semver-major']
+      - dependency-name: react-dom
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3

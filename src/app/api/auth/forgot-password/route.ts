@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { forgotPassword } from '@/lib/cognito';
 
-export async function POST(request: NextRequest) {
-  try {
-    const { email } = await request.json();
-    if (!email) return NextResponse.json({ error: 'Email is required.' }, { status: 400 });
+export const EmailSchema = z.object({
+  email: z.string().email(),
+});
 
+export async function POST(request: NextRequest) {
+  const parsed = EmailSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { email } = parsed.data;
+
+  try {
     await forgotPassword(email);
     return NextResponse.json({ success: true, message: 'Reset code sent. Check your email.' });
   } catch (err: unknown) {

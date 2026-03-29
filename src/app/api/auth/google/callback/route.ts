@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+
+export const CallbackQuerySchema = z.object({
+  code: z.string().min(1),
+  state: z.string().optional(),
+});
 
 // Cognito exchanges the code for tokens at this endpoint.
 // After Google login, Cognito redirects here with an authorization code.
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
-  const code = searchParams.get('code');
   const error = searchParams.get('error');
 
   const appUrl = process.env.NEXT_PUBLIC_URL!;
@@ -16,9 +21,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!code) {
+  const parsed = CallbackQuerySchema.safeParse(Object.fromEntries(searchParams));
+  if (!parsed.success) {
     return NextResponse.redirect(new URL('/sign-in?error=missing_code', appUrl));
   }
+
+  const { code } = parsed.data;
 
   try {
     const domain = process.env.COGNITO_DOMAIN!;

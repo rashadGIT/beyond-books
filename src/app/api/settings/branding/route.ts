@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+
+export const BrandingSchema = z.object({
+  orgName: z.string().optional(),
+  tagLine: z.string().optional(),
+  taxId: z.string().optional(),
+  signerName: z.string().optional(),
+  signerTitle: z.string().optional(),
+  primaryColor: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
+  logoUrl: z.string().url().optional().or(z.literal('')),
+});
 
 const DEFAULT_BRANDING = {
   orgName: 'Your Organization',
@@ -23,16 +34,11 @@ export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await request.json();
-
-  // Only accept known fields — strip anything else
-  const allowed = ['orgName', 'tagLine', 'taxId', 'signerName', 'signerTitle', 'logoUrl', 'primaryColor'] as const;
-  const data: Partial<Record<typeof allowed[number], string>> = {};
-  for (const key of allowed) {
-    if (key in body && typeof body[key] === 'string') {
-      data[key] = body[key];
-    }
+  const parsed = BrandingSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
   }
+  const data = parsed.data;
 
   const branding = await prisma.orgBranding.upsert({
     where: { userId },

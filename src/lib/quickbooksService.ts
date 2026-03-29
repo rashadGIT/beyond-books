@@ -53,7 +53,7 @@ export function parseQbReport(raw: any): ParsedQbReport {
   } else {
     // Flat report (Trial Balance) — all Data rows become lines in one section
     const lines: ReportLine[] = [];
-    let grandTotal: ReportLine = {};
+    const grandTotal: ReportLine = {};
 
     for (const row of allRows) {
       if (row.type === 'Data') {
@@ -768,7 +768,7 @@ export class QuickBooksService {
    * Create a QB Bill split across programs per an allocation rule.
    * Each line item gets the QB Class of the corresponding program.
    */
-  async createBillWithAllocationForConnection(  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async createBillWithAllocationForConnection(   
     connection: any,
     bill: {
       vendor: string;

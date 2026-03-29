@@ -1,7 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { sendViaResend, sendViaGmail, sendViaSES, refreshGmailToken } from '@/lib/emailService';
 import type { SendLetterParams } from '@/lib/emailService';
+
+const DonorSchema = z.object({
+  donorName: z.string().min(1),
+  donorEmail: z.string().email(),
+  totalAmount: z.number().positive(),
+  dateRange: z.string().optional(),
+  orgName: z.string().optional(),
+  taxId: z.string().optional(),
+  donations: z.array(z.object({
+    date: z.string(),
+    description: z.string(),
+    amount: z.number(),
+  })).optional(),
+  pdfUrl: z.string().optional(),
+});
+
+export const SendLetterSchema = z.object({
+  action: z.enum(['bulk', 'single']).optional(),
+  donors: z.array(DonorSchema).optional(),
+  donorName: z.string().optional(),
+  donorEmail: z.string().optional(),
+  totalAmount: z.number().optional(),
+  dateRange: z.string().optional(),
+  orgName: z.string().optional(),
+  taxId: z.string().optional(),
+  donations: z.array(z.object({
+    date: z.string(),
+    description: z.string(),
+    amount: z.number(),
+  })).optional(),
+});
 
 type EmailProvider = {
   provider: string;
@@ -59,6 +91,12 @@ export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const parsed = SendLetterSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const body = parsed.data;
+
   const ep = await prisma.emailProvider.findUnique({ where: { userId } }) as EmailProvider | null;
   if (!ep) {
     return NextResponse.json(
@@ -66,8 +104,6 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-
-  const body = await request.json();
 
   // Bulk send
   if (body.action === 'bulk') {

@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { signIn } from '@/lib/cognito';
 import { prisma } from '@/lib/prisma';
 
+export const LoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
 export async function POST(request: NextRequest) {
+  const parsed = LoginSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const { email, password } = parsed.data;
+
   try {
-    const { email, password } = await request.json();
-
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
-    }
-
     const result = await signIn(email, password);
     const tokens = result.AuthenticationResult;
 

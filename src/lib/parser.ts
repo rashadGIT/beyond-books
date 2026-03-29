@@ -2,21 +2,21 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { StandardizedTransaction, MappingResult, CustomerContact } from './types';
 
-const parseCurrency = (val: any): number => {
+export const parseCurrency = (val: any): number => {
   if (typeof val === 'number') return val;
   if (!val) return 0;
   const cleaned = val.toString().replace(/[$,\s]/g, '');
   return parseFloat(cleaned) || 0;
 };
 
-const parsePercent = (val: any): number => {
+export const parsePercent = (val: any): number => {
   if (typeof val === 'number') return val;
   if (!val) return 0;
   const cleaned = val.toString().replace(/[%\s]/g, '');
   return parseFloat(cleaned) || 0;
 };
 
-const parseDate = (val: any): string => {
+export const parseDate = (val: any): string => {
   if (!val) return '';
 
   // If it's a number, it's likely an Excel serial date
@@ -89,7 +89,7 @@ export const processExcel = (file: File): Promise<MappingResult> => {
 };
 
 // Main data processing logic (used by both CSV and Excel)
-const processData = (data: any[], headers: string[]): MappingResult => {
+export const processData = (data: any[], headers: string[]): MappingResult => {
   let source = 'Unknown';
   const transactions: StandardizedTransaction[] = [];
 

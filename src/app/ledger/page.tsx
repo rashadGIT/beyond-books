@@ -99,13 +99,6 @@ export default function LedgerPage() {
       .catch(() => setQbConnected(false));
   }, []);
 
-  // Load accounts when connected + on accounts tab
-  useEffect(() => {
-    if (qbConnected && tab === 'accounts' && !loaded.current.has('accounts')) {
-      loadAccounts();
-    }
-  }, [qbConnected, tab]);
-
   async function loadAccounts() {
     setLoading(true);
     try {
@@ -118,6 +111,13 @@ export default function LedgerPage() {
     } catch { /* silent */ }
     setLoading(false);
   }
+
+  // Load accounts when connected + on accounts tab
+  useEffect(() => {
+    if (qbConnected && tab === 'accounts' && !loaded.current.has('accounts')) {
+      loadAccounts();
+    }
+  }, [qbConnected, tab]);
 
   async function loadAr() {
     if (loaded.current.has('ar')) return;

@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { sendViaResend, sendViaGmail, sendViaSES, refreshGmailToken } from '@/lib/emailService';
+
+export const EmailSettingsSchema = z.object({
+  action: z.string().optional(),
+  provider: z.string().optional(),
+  fromEmail: z.string().optional(),
+  fromName: z.string().optional(),
+  resendApiKey: z.string().optional(),
+});
 
 export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
@@ -22,7 +31,11 @@ export async function POST(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await request.json();
+  const parsed = EmailSettingsSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Validation failed', details: parsed.error.flatten() }, { status: 400 });
+  }
+  const body = parsed.data;
   const { action } = body;
 
   // Disconnect
